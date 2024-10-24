@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+type CallbackError = Error | undefined;
 
 const eventSchema = new mongoose.Schema({
   title: {
@@ -10,6 +11,7 @@ const eventSchema = new mongoose.Schema({
     type: String,
     required: [true, "Event number is required"],
     trim: true,
+    unique: true,
   },
   city: {
     type: String,
@@ -71,7 +73,26 @@ const eventSchema = new mongoose.Schema({
 });
 
 // Middleware pour parser les genres si c'est une string JSON
-eventSchema.pre("save", function (next) {
+eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
+  if (!this.isModified("eventNumber")) {
+    try {
+      const lastEvent = await mongoose
+        .model("Event")
+        .findOne({})
+        .sort({ eventNumber: -1 });
+
+      const nextNumber = lastEvent
+        ? String(Number(lastEvent.eventNumber) + 1)
+        : "1";
+
+      this.eventNumber = nextNumber.padStart(3, "0");
+    } catch (error) {
+      return next(error as CallbackError);
+    }
+  } else {
+    this.eventNumber = this.eventNumber.padStart(3, "0");
+  }
+
   if (this.genres && typeof this.genres === "string") {
     try {
       this.genres = JSON.parse(this.genres);
