@@ -29,6 +29,9 @@ const getErrorMessage = (error: unknown): string => {
 router.get("/", async (req, res) => {
   try {
     const events = await Event.find().sort({ date: -1 });
+    events.forEach((event) => {
+      console.log(`Event ${event.title} - isPast: ${event.isPast}`);
+    });
     res.json(events);
   } catch (error) {
     console.error("Error fetching events:", error);
