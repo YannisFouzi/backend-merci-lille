@@ -39,25 +39,34 @@ router.get("/", async (req, res) => {
 // Routes protégées avec upload d'image
 router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
   try {
-    console.log("Files received:", req.file);
-    console.log("Body received:", req.body);
+    console.log("1. Request received:", {
+      body: req.body,
+      file: req.file,
+    });
 
     const eventData = req.body;
 
-    // Vérifier si une image a été uploadée
+    // Validation de l'image
     if (!req.file) {
       return res.status(400).json({
         message: "Image is required",
+        details: "No file was uploaded",
       });
     }
 
-    // Ajouter l'imageSrc et imagePublicId depuis Cloudinary
-    if (req.file) {
-      eventData.imageSrc = req.file.path; // L'URL de l'image sur Cloudinary
-      eventData.imagePublicId =
-        (req.file as any).filename || `event_${Date.now()}`; // L'ID public généré par Cloudinary
-    }
+    console.log("2. Image validation passed");
 
+    // Ajout des données d'image
+    eventData.imageSrc = req.file.path;
+    eventData.imagePublicId =
+      (req.file as any).filename || `event_${Date.now()}`;
+
+    console.log("3. Image data added:", {
+      imageSrc: eventData.imageSrc,
+      imagePublicId: eventData.imagePublicId,
+    });
+
+    // Validation du numéro d'événement
     if (eventData.eventNumber) {
       const existingEvent = await Event.findOne({
         eventNumber: eventData.eventNumber.padStart(3, "0"),
@@ -66,11 +75,17 @@ router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
       if (existingEvent) {
         return res.status(400).json({
           message: "Ce numéro d'événement existe déjà",
+          details: {
+            eventNumber: eventData.eventNumber,
+            existing: existingEvent._id,
+          },
         });
       }
     }
 
-    // Gérer les genres
+    console.log("4. Event number validation passed");
+
+    // Gestion des genres
     if (eventData.genres) {
       try {
         eventData.genres =
@@ -78,33 +93,40 @@ router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
             ? JSON.parse(eventData.genres)
             : eventData.genres;
       } catch (e) {
-        console.log("Error parsing genres:", e);
         return res.status(400).json({
           message: "Invalid genres format",
+          details: e instanceof Error ? e.message : "Parse error",
         });
       }
     }
 
-    // Créer l'événement
-    const newEvent = new Event({
-      ...eventData,
-      // S'assurer que ces champs sont présents
-      imageSrc: eventData.imageSrc,
-      imagePublicId: eventData.imagePublicId,
-      genres: eventData.genres || [],
-      isFree: eventData.isFree === "true" || eventData.isFree === true,
-      price: eventData.price || null,
-    });
+    console.log("5. Event data before save:", eventData);
 
-    await newEvent.save();
-    res.status(201).json(newEvent);
+    // Création de l'événement avec validation explicite
+    try {
+      const newEvent = new Event({
+        ...eventData,
+        genres: eventData.genres || [],
+        isFree: eventData.isFree === "true" || eventData.isFree === true,
+        price: eventData.price || null,
+      });
+
+      const validationError = newEvent.validateSync();
+      if (validationError) {
+        return res.status(400).json({
+          message: "Validation failed",
+          details: validationError.errors,
+        });
+      }
+
+      await newEvent.save();
+      res.status(201).json(newEvent);
+    } catch (saveError) {
+      console.error("6. Save error:", saveError);
+      throw saveError;
+    }
   } catch (error) {
-    console.log("Complete error object:", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-      details: error,
-    });
-
+    console.error("Complete error:", error);
     res.status(400).json({
       message: "Error creating event",
       error: error instanceof Error ? error.message : "Unknown error",

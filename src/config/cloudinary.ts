@@ -33,15 +33,8 @@ cloudinary.config({
 const storage = new CloudinaryStorage({
   cloudinary: cloudinary,
   params: async (req, file) => {
-    console.log("Processing file upload:", {
-      originalname: file.originalname,
-      mimetype: file.mimetype,
-    });
-
-    const timestamp = Date.now();
-    const uniqueFileName = `event_${timestamp}`;
-
-    console.log("Generated filename:", uniqueFileName);
+    console.log("Processing file:", file);
+    const uniqueFileName = `event_${Date.now()}`;
 
     return {
       folder: "mercilille-events",
@@ -56,7 +49,6 @@ const storage = new CloudinaryStorage({
         },
       ],
       format: "jpg",
-      resource_type: "auto",
     };
   },
 });
