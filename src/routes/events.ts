@@ -39,10 +39,31 @@ router.get("/", async (req, res) => {
 // Routes protégées avec upload d'image
 router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
   try {
-    const eventData = req.body;
-    console.log("Received event data:", eventData);
+    console.log("Files received:", req.file); // Log de l'image
+    console.log("Body received:", req.body); // Log du body
 
-    // Si un numéro d'événement est fourni manuellement
+    const eventData = req.body;
+
+    // Vérification des champs requis
+    const requiredFields = ["title", "city", "date", "time", "ticketLink"];
+    const missingFields = requiredFields.filter((field) => !eventData[field]);
+
+    if (missingFields.length > 0) {
+      console.log("Missing fields:", missingFields);
+      return res.status(400).json({
+        message: "Missing required fields",
+        missingFields: missingFields,
+      });
+    }
+
+    // Vérification de l'image
+    if (!req.file && !eventData.imageSrc) {
+      console.log("Image missing");
+      return res.status(400).json({
+        message: "Image is required",
+      });
+    }
+
     if (eventData.eventNumber) {
       const existingEvent = await Event.findOne({
         eventNumber: eventData.eventNumber.padStart(3, "0"),
@@ -61,21 +82,44 @@ router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
       }
     }
 
+    // Vérification des genres
+    if (eventData.genres) {
+      try {
+        eventData.genres =
+          typeof eventData.genres === "string"
+            ? JSON.parse(eventData.genres)
+            : eventData.genres;
+      } catch (e) {
+        console.log("Error parsing genres:", e);
+        return res.status(400).json({
+          message: "Invalid genres format",
+        });
+      }
+    }
+
     const validation = await validateEvent(eventData);
     if (!validation.isValid) {
       console.log("Validation error:", validation.errors);
-      return res.status(400).json({ message: validation.errors });
+      return res.status(400).json({
+        message: "Validation error",
+        details: validation.errors,
+      });
     }
 
     const newEvent = new Event(eventData);
     await newEvent.save();
     res.status(201).json(newEvent);
   } catch (error) {
-    console.log("Complete error:", error);
+    console.log("Complete error object:", {
+      message: error instanceof Error ? error.message : "Unknown error",
+      stack: error instanceof Error ? error.stack : undefined,
+      details: error,
+    });
+
     res.status(400).json({
       message: "Error creating event",
       error: error instanceof Error ? error.message : "Unknown error",
-      details: error,
+      details: JSON.stringify(error, null, 2),
     });
   }
 });
