@@ -40,6 +40,7 @@ router.get("/", async (req, res) => {
 router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
   try {
     const eventData = req.body;
+    console.log("Received event data:", eventData);
 
     // Si un numéro d'événement est fourni manuellement
     if (eventData.eventNumber) {
@@ -62,6 +63,7 @@ router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
 
     const validation = await validateEvent(eventData);
     if (!validation.isValid) {
+      console.log("Validation error:", validation.errors);
       return res.status(400).json({ message: validation.errors });
     }
 
@@ -69,10 +71,11 @@ router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
     await newEvent.save();
     res.status(201).json(newEvent);
   } catch (error) {
-    console.error("Error creating event:", error);
+    console.log("Complete error:", error);
     res.status(400).json({
       message: "Error creating event",
       error: error instanceof Error ? error.message : "Unknown error",
+      details: error,
     });
   }
 });
