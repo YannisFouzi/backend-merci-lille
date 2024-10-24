@@ -9,7 +9,7 @@ const eventSchema = new mongoose.Schema({
   },
   eventNumber: {
     type: String,
-    required: [true, "Event number is required"],
+    required: false,
     trim: true,
     unique: true,
   },
@@ -74,7 +74,7 @@ const eventSchema = new mongoose.Schema({
 
 // Middleware pour parser les genres si c'est une string JSON
 eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
-  if (!this.isModified("eventNumber")) {
+  if (!this.eventNumber) {
     try {
       const lastEvent = await mongoose
         .model("Event")
