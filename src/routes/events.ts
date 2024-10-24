@@ -1,7 +1,7 @@
 import express from "express";
 import { deleteImage, upload } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
-import { Event, validateEvent } from "../models/Event";
+import { Event } from "../models/Event";
 
 const router = express.Router();
 
@@ -39,29 +39,23 @@ router.get("/", async (req, res) => {
 // Routes protégées avec upload d'image
 router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
   try {
-    console.log("Files received:", req.file); // Log de l'image
-    console.log("Body received:", req.body); // Log du body
+    console.log("Files received:", req.file);
+    console.log("Body received:", req.body);
 
     const eventData = req.body;
 
-    // Vérification des champs requis
-    const requiredFields = ["title", "city", "date", "time", "ticketLink"];
-    const missingFields = requiredFields.filter((field) => !eventData[field]);
-
-    if (missingFields.length > 0) {
-      console.log("Missing fields:", missingFields);
-      return res.status(400).json({
-        message: "Missing required fields",
-        missingFields: missingFields,
-      });
-    }
-
-    // Vérification de l'image
-    if (!req.file && !eventData.imageSrc) {
-      console.log("Image missing");
+    // Vérifier si une image a été uploadée
+    if (!req.file) {
       return res.status(400).json({
         message: "Image is required",
       });
+    }
+
+    // Ajouter l'imageSrc et imagePublicId depuis Cloudinary
+    if (req.file) {
+      eventData.imageSrc = req.file.path; // L'URL de l'image sur Cloudinary
+      eventData.imagePublicId =
+        (req.file as any).filename || `event_${Date.now()}`; // L'ID public généré par Cloudinary
     }
 
     if (eventData.eventNumber) {
@@ -74,15 +68,9 @@ router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
           message: "Ce numéro d'événement existe déjà",
         });
       }
-
-      if (isNaN(Number(eventData.eventNumber))) {
-        return res.status(400).json({
-          message: "Le numéro d'événement doit être un nombre",
-        });
-      }
     }
 
-    // Vérification des genres
+    // Gérer les genres
     if (eventData.genres) {
       try {
         eventData.genres =
@@ -97,16 +85,17 @@ router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
       }
     }
 
-    const validation = await validateEvent(eventData);
-    if (!validation.isValid) {
-      console.log("Validation error:", validation.errors);
-      return res.status(400).json({
-        message: "Validation error",
-        details: validation.errors,
-      });
-    }
+    // Créer l'événement
+    const newEvent = new Event({
+      ...eventData,
+      // S'assurer que ces champs sont présents
+      imageSrc: eventData.imageSrc,
+      imagePublicId: eventData.imagePublicId,
+      genres: eventData.genres || [],
+      isFree: eventData.isFree === "true" || eventData.isFree === true,
+      price: eventData.price || null,
+    });
 
-    const newEvent = new Event(eventData);
     await newEvent.save();
     res.status(201).json(newEvent);
   } catch (error) {
@@ -128,6 +117,18 @@ router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
 router.put("/:id", authMiddleware, upload.single("image"), async (req, res) => {
   try {
     const eventData = req.body;
+
+    if (req.file) {
+      eventData.imageSrc = (req.file as any).path;
+      eventData.imagePublicId =
+        (req.file as any).filename || `event_${Date.now()}`;
+
+      // Supprimer l'ancienne image si elle existe
+      const oldEvent = await Event.findById(req.params.id);
+      if (oldEvent?.imagePublicId) {
+        await deleteImage(oldEvent.imagePublicId);
+      }
+    }
 
     // Si le numéro est modifié, faire les vérifications
     if (eventData.eventNumber) {

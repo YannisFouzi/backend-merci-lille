@@ -36,7 +36,6 @@ const storage = new CloudinaryStorage({
     console.log("Processing file upload:", {
       originalname: file.originalname,
       mimetype: file.mimetype,
-      size: file.size,
     });
 
     const timestamp = Date.now();
@@ -44,9 +43,9 @@ const storage = new CloudinaryStorage({
 
     console.log("Generated filename:", uniqueFileName);
 
-    const params = {
-      resource_type: "auto",
+    return {
       folder: "mercilille-events",
+      public_id: uniqueFileName,
       allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
       transformation: [
         {
@@ -56,11 +55,9 @@ const storage = new CloudinaryStorage({
           quality: "auto",
         },
       ],
-      public_id: uniqueFileName,
+      format: "jpg",
+      resource_type: "auto",
     };
-
-    console.log("Cloudinary upload params:", params);
-    return params;
   },
 });
 
