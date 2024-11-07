@@ -92,14 +92,19 @@ eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
   } else {
     this.eventNumber = this.eventNumber.padStart(3, "0");
   }
-
-  if (this.genres && typeof this.genres === "string") {
-    try {
-      this.genres = JSON.parse(this.genres);
-    } catch (e) {
-      console.error("Error parsing genres:", e);
+  try {
+    if (this.genres) {
+      this.genres = Array.isArray(this.genres)
+        ? this.genres
+        : typeof this.genres === "string"
+        ? JSON.parse(this.genres)
+        : [];
     }
+  } catch (e) {
+    console.error("Error processing genres:", e);
+    this.genres = [];
   }
+
   next();
 });
 
