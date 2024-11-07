@@ -143,6 +143,20 @@ router.put("/:id", authMiddleware, upload.single("image"), async (req, res) => {
   try {
     const eventData = req.body;
 
+    if (eventData.genres) {
+      try {
+        eventData.genres =
+          typeof eventData.genres === "string"
+            ? JSON.parse(eventData.genres)
+            : eventData.genres;
+      } catch (e) {
+        return res.status(400).json({
+          message: "Invalid genres format",
+          details: e instanceof Error ? e.message : "Parse error",
+        });
+      }
+    }
+
     if (req.file) {
       eventData.imageSrc = (req.file as any).path;
       eventData.imagePublicId =
