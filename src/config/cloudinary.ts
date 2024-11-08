@@ -36,7 +36,7 @@ const storage = new CloudinaryStorage({
     console.log("Processing file:", file);
     const uniqueFileName = `event_${Date.now()}`;
 
-    return {
+    const params = {
       folder: "mercilille-events",
       public_id: uniqueFileName,
       allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
@@ -46,9 +46,12 @@ const storage = new CloudinaryStorage({
           height: 1000,
           crop: "limit",
           quality: "auto",
+          fetch_format: "auto",
+          dpr: "auto",
+          loading: "lazy",
         },
       ],
-      format: "jpg",
+      format: "auto",
     };
   },
 });
