@@ -53,6 +53,7 @@ const storage = new CloudinaryStorage({
       ],
       format: "auto",
     };
+    return params;
   },
 });
 
