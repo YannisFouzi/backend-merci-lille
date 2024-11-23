@@ -50,8 +50,8 @@ router.post("/", authMiddleware, uploadGallery, async (req, res) => {
   }
 });
 
-// Route pour suppression multiple - DOIT ÊTRE AVANT LA ROUTE AVEC ID
-router.delete("/batch", authMiddleware, async (req, res) => {
+// Route pour suppression multiple
+router.post("/delete-multiple", authMiddleware, async (req, res) => {
   try {
     const { imageIds } = req.body;
     if (!imageIds || !Array.isArray(imageIds)) {
@@ -77,7 +77,7 @@ router.delete("/batch", authMiddleware, async (req, res) => {
   }
 });
 
-// Route pour suppression unique - DOIT ÊTRE APRÈS /batch
+// Route pour suppression unique
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
     const image = await Gallery.findById(req.params.id);
