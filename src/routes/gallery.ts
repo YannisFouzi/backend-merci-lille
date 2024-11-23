@@ -48,23 +48,7 @@ router.post("/", authMiddleware, uploadGallery, async (req, res) => {
   }
 });
 
-router.delete("/:id", authMiddleware, async (req, res) => {
-  try {
-    const image = await Gallery.findById(req.params.id);
-    if (!image) {
-      return res.status(404).json({ message: "Image not found" });
-    }
-
-    await deleteImage(image.imagePublicId);
-    await Gallery.findByIdAndDelete(req.params.id);
-
-    res.json({ message: "Image deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting gallery image:", error);
-    res.status(500).json({ message: "Error deleting image" });
-  }
-});
-
+// Route pour suppression multiple - DOIT ÊTRE AVANT LA ROUTE AVEC ID
 router.delete("/batch", authMiddleware, async (req, res) => {
   try {
     const { imageIds } = req.body;
@@ -88,6 +72,24 @@ router.delete("/batch", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Error deleting gallery images:", error);
     res.status(500).json({ message: "Error deleting images" });
+  }
+});
+
+// Route pour suppression unique - DOIT ÊTRE APRÈS /batch
+router.delete("/:id", authMiddleware, async (req, res) => {
+  try {
+    const image = await Gallery.findById(req.params.id);
+    if (!image) {
+      return res.status(404).json({ message: "Image not found" });
+    }
+
+    await deleteImage(image.imagePublicId);
+    await Gallery.findByIdAndDelete(req.params.id);
+
+    res.json({ message: "Image deleted successfully" });
+  } catch (error) {
+    console.error("Error deleting gallery image:", error);
+    res.status(500).json({ message: "Error deleting image" });
   }
 });
 
