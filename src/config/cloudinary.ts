@@ -61,6 +61,7 @@ const galleryStorage = new CloudinaryStorage({
       folder: "mercilille-gallery",
       public_id: uniqueFileName,
       allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+      resource_type: "auto",
       transformation: [
         {
           width: 1000,
@@ -77,7 +78,10 @@ const galleryStorage = new CloudinaryStorage({
 // Upload middleware pour la galerie
 export const uploadGallery = multer({
   storage: galleryStorage,
-  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
+  limits: {
+    fileSize: 30 * 1024 * 1024, // 30MB
+    fieldSize: 30 * 1024 * 1024,
+  },
 });
 
 // Fonction pour supprimer une image
