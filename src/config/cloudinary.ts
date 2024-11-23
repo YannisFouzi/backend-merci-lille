@@ -56,7 +56,7 @@ const galleryStorage = new CloudinaryStorage({
       folder: "mercilille-gallery",
       public_id: uniqueFileName,
       allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
-      resource_type: "raw",
+      resource_type: "auto",
       transformation: [
         {
           width: 1000,
@@ -64,8 +64,21 @@ const galleryStorage = new CloudinaryStorage({
           crop: "limit",
           quality: "auto:eco",
           fetch_format: "auto",
+          flags: "progressive",
         },
       ],
+      eager: [
+        {
+          width: 400,
+          height: 400,
+          crop: "fill",
+          quality: "auto:eco",
+        },
+      ],
+      eager_async: true,
+      use_filename: true,
+      unique_filename: true,
+      overwrite: false,
     };
   },
 });
