@@ -1,5 +1,5 @@
 import express from "express";
-import { deleteImage, upload } from "../config/cloudinary";
+import { deleteImage, galleryUpload } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
 import { GalleryPhoto } from "../models/GalleryPhoto";
 
@@ -16,30 +16,35 @@ router.get("/", async (req, res) => {
 });
 
 // Ajouter une photo
-router.post("/", authMiddleware, upload.single("image"), async (req, res) => {
-  try {
-    if (!req.file) {
-      return res.status(400).json({ message: "Image is required" });
+router.post(
+  "/",
+  authMiddleware,
+  galleryUpload.single("image"),
+  async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "Image is required" });
+      }
+
+      const photoData = {
+        imageSrc: req.file.path,
+        imagePublicId: req.file.filename || `gallery_${Date.now()}`,
+        title: req.body.title,
+        description: req.body.description,
+      };
+
+      const newPhoto = new GalleryPhoto(photoData);
+      await newPhoto.save();
+
+      res.status(201).json(newPhoto);
+    } catch (error) {
+      res.status(400).json({
+        message: "Error adding photo",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
     }
-
-    const photoData = {
-      imageSrc: req.file.path,
-      imagePublicId: req.file.filename || `gallery_${Date.now()}`,
-      title: req.body.title,
-      description: req.body.description,
-    };
-
-    const newPhoto = new GalleryPhoto(photoData);
-    await newPhoto.save();
-
-    res.status(201).json(newPhoto);
-  } catch (error) {
-    res.status(400).json({
-      message: "Error adding photo",
-      error: error instanceof Error ? error.message : "Unknown error",
-    });
   }
-});
+);
 
 // Supprimer une photo
 router.delete("/:id", authMiddleware, async (req, res) => {
