@@ -33,6 +33,7 @@ const storage = new CloudinaryStorage({
       folder: "mercilille-events",
       public_id: uniqueFileName,
       allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+      resource_type: "raw",
       transformation: [
         {
           width: 1000,
@@ -46,12 +47,6 @@ const storage = new CloudinaryStorage({
   },
 });
 
-// Upload middleware pour les événements
-export const upload = multer({
-  storage: storage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
-});
-
 // Configuration du storage pour la galerie
 const galleryStorage = new CloudinaryStorage({
   cloudinary: cloudinary,
@@ -61,7 +56,7 @@ const galleryStorage = new CloudinaryStorage({
       folder: "mercilille-gallery",
       public_id: uniqueFileName,
       allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
-      resource_type: "auto",
+      resource_type: "raw",
       transformation: [
         {
           width: 1000,
@@ -75,12 +70,25 @@ const galleryStorage = new CloudinaryStorage({
   },
 });
 
-// Upload middleware pour la galerie
+// Configuration Multer pour les événements
+const eventLimits = {
+  fileSize: 5 * 1024 * 1024, // 5MB
+};
+
+// Configuration Multer pour la galerie
+const galleryLimits = {
+  fileSize: 10 * 1024 * 1024, // 10MB
+};
+
+// Export des middlewares configurés séparément
+export const upload = multer({
+  storage: storage,
+  limits: eventLimits,
+});
+
 export const uploadGallery = multer({
   storage: galleryStorage,
-  limits: {
-    fileSize: 10 * 1024 * 1024, // 10MB (limite gratuite de Cloudinary)
-  },
+  limits: galleryLimits,
 });
 
 // Fonction pour supprimer une image
