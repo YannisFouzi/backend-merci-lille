@@ -8,7 +8,7 @@ const router = express.Router();
 // Routes publiques
 router.get("/", async (req, res) => {
   try {
-    const events = await Event.find().sort({ date: 1 });
+    const events = await Event.find().sort({ date: -1 });
     res.json(events);
   } catch (error) {
     console.error("Error fetching events:", error);
