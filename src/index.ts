@@ -3,6 +3,7 @@ import express from "express";
 import { connectDB } from "./config/database";
 import authRoutes from "./routes/auth";
 import eventRoutes from "./routes/events";
+import galleryRoutes from "./routes/gallery.js";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -18,6 +19,7 @@ app.use(express.json());
 // Routes
 app.use("/api/events", eventRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/gallery", galleryRoutes);
 
 // Connect to database and start server
 connectDB().then(() => {
