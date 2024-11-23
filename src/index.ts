@@ -3,7 +3,7 @@ import express from "express";
 import { connectDB } from "./config/database";
 import authRoutes from "./routes/auth";
 import eventRoutes from "./routes/events";
-import galleryRoutes from "./routes/gallery.js";
+import galleryRoutes from "./routes/gallery";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
