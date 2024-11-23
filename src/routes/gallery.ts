@@ -7,10 +7,13 @@ const router = express.Router();
 
 // Récupérer toutes les photos
 router.get("/", async (req, res) => {
+  console.log("GET /gallery - début");
   try {
     const photos = await GalleryPhoto.find().sort({ createdAt: -1 });
+    console.log("Photos trouvées:", photos);
     res.json(photos);
   } catch (error) {
+    console.error("Erreur GET /gallery:", error);
     res.status(500).json({ message: "Error fetching photos" });
   }
 });

@@ -19,7 +19,19 @@ app.use(express.json());
 // Routes
 app.use("/api/events", eventRoutes);
 app.use("/api/auth", authRoutes);
-app.use("/api/gallery", galleryRoutes);
+app.use(
+  "/api/gallery",
+  (req, res, next) => {
+    console.log("Requête reçue sur /api/gallery:", {
+      method: req.method,
+      path: req.path,
+      body: req.body,
+      headers: req.headers,
+    });
+    next();
+  },
+  galleryRoutes
+);
 
 // Connect to database and start server
 connectDB().then(() => {
