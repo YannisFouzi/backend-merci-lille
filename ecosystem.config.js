@@ -2,7 +2,7 @@ module.exports = {
   apps: [
     {
       name: "mercilille-api",
-      script: "dist/index.js", // Le fichier compilé
+      script: "dist/index.js",
       instances: 1,
       autorestart: true,
       watch: false,
@@ -17,6 +17,7 @@ module.exports = {
         CLOUDINARY_API_KEY: "566397884333594",
         CLOUDINARY_API_SECRET: "PJojaHTfjNFgri_5z-g9aRGwnNg",
       },
+      node_args: "--max_old_space_size=512",
     },
   ],
 };
