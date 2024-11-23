@@ -19,14 +19,16 @@ router.get("/", async (req, res) => {
 // Routes protégées
 router.post("/", authMiddleware, uploadGallery, async (req, res) => {
   try {
-    if (!req.files || req.files.length === 0) {
+    console.log("Files received:", req.files);
+
+    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
       return res.status(400).json({
         message: "Images are required",
         details: "No files were uploaded",
       });
     }
 
-    const uploadedFiles = req.files as Express.Multer.File[];
+    const uploadedFiles = req.files;
     const savedImages = [];
 
     for (const file of uploadedFiles) {
