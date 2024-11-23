@@ -79,8 +79,7 @@ const galleryStorage = new CloudinaryStorage({
 export const uploadGallery = multer({
   storage: galleryStorage,
   limits: {
-    fileSize: 30 * 1024 * 1024, // 30MB
-    fieldSize: 30 * 1024 * 1024,
+    fileSize: 10 * 1024 * 1024, // 10MB (limite gratuite de Cloudinary)
   },
 });
 
