@@ -52,6 +52,34 @@ export const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
 });
 
+// Configuration du storage pour la galerie
+const galleryStorage = new CloudinaryStorage({
+  cloudinary: cloudinary,
+  params: async (req, file) => {
+    const uniqueFileName = `gallery_${Date.now()}`;
+    return {
+      folder: "mercilille-gallery",
+      public_id: uniqueFileName,
+      allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
+      transformation: [
+        {
+          width: 1000,
+          height: 1000,
+          crop: "limit",
+          quality: "auto",
+          fetch_format: "auto",
+        },
+      ],
+    };
+  },
+});
+
+// Upload middleware pour la galerie
+export const uploadGallery = multer({
+  storage: galleryStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+});
+
 // Fonction pour supprimer une image
 export const deleteImage = async (publicId: string) => {
   try {
@@ -68,4 +96,4 @@ export const deleteImage = async (publicId: string) => {
   }
 };
 
-export default { upload, deleteImage };
+export default { upload, uploadGallery, deleteImage };
