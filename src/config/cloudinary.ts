@@ -66,7 +66,7 @@ const galleryStorage = new CloudinaryStorage({
           width: 1000,
           height: 1000,
           crop: "limit",
-          quality: "auto",
+          quality: "auto:eco",
           fetch_format: "auto",
         },
       ],
@@ -77,7 +77,7 @@ const galleryStorage = new CloudinaryStorage({
 // Upload middleware pour la galerie
 export const uploadGallery = multer({
   storage: galleryStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5MB
+  limits: { fileSize: 30 * 1024 * 1024 }, // 30MB
 });
 
 // Fonction pour supprimer une image
