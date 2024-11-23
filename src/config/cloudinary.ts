@@ -84,12 +84,12 @@ const galleryLimits = {
 export const upload = multer({
   storage: storage,
   limits: eventLimits,
-});
+}).single("image");
 
 export const uploadGallery = multer({
   storage: galleryStorage,
   limits: galleryLimits,
-});
+}).single("image");
 
 // Fonction pour supprimer une image
 export const deleteImage = async (publicId: string) => {

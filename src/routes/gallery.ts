@@ -17,35 +17,30 @@ router.get("/", async (req, res) => {
 });
 
 // Routes protégées
-router.post(
-  "/",
-  authMiddleware,
-  uploadGallery.single("image"),
-  async (req, res) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({
-          message: "Image is required",
-          details: "No file was uploaded",
-        });
-      }
-
-      const newImage = new Gallery({
-        imageSrc: req.file.path,
-        imagePublicId: (req.file as any).filename || `gallery_${Date.now()}`,
-      });
-
-      await newImage.save();
-      res.status(201).json(newImage);
-    } catch (error) {
-      console.error("Error uploading gallery image:", error);
-      res.status(400).json({
-        message: "Error uploading image",
-        error: error instanceof Error ? error.message : "Unknown error",
+router.post("/", authMiddleware, uploadGallery, async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({
+        message: "Image is required",
+        details: "No file was uploaded",
       });
     }
+
+    const newImage = new Gallery({
+      imageSrc: req.file.path,
+      imagePublicId: (req.file as any).filename || `gallery_${Date.now()}`,
+    });
+
+    await newImage.save();
+    res.status(201).json(newImage);
+  } catch (error) {
+    console.error("Error uploading gallery image:", error);
+    res.status(400).json({
+      message: "Error uploading image",
+      error: error instanceof Error ? error.message : "Unknown error",
+    });
   }
-);
+});
 
 router.delete("/:id", authMiddleware, async (req, res) => {
   try {
