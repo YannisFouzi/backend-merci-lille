@@ -35,6 +35,12 @@ const eventSchema = new mongoose.Schema({
     type: Boolean,
     default: false,
   },
+  price: {
+    type: String,
+    required: function (this: any) {
+      return !this.isFree;
+    },
+  },
   genres: {
     type: [String],
     default: [],
