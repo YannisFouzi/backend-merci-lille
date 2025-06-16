@@ -102,7 +102,7 @@ export const upload = multer({
 export const uploadGallery = multer({
   storage: galleryStorage,
   limits: galleryLimits,
-}).array("images", 10);
+}).array("images", 100);
 
 // Fonction pour supprimer une image
 export const deleteImage = async (publicId: string) => {
