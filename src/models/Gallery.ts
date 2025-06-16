@@ -9,6 +9,10 @@ const gallerySchema = new mongoose.Schema({
     type: String,
     required: [true, "Image public ID is required"],
   },
+  order: {
+    type: Number,
+    default: 0,
+  },
   createdAt: {
     type: Date,
     default: Date.now,

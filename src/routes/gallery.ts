@@ -8,7 +8,7 @@ const router = express.Router();
 // Routes publiques
 router.get("/", async (req, res) => {
   try {
-    const images = await Gallery.find().sort({ createdAt: -1 });
+    const images = await Gallery.find().sort({ order: 1, createdAt: -1 });
     res.json(images);
   } catch (error) {
     console.error("Error fetching gallery images:", error);
@@ -31,10 +31,15 @@ router.post("/", authMiddleware, uploadGallery, async (req, res) => {
     const uploadedFiles = req.files;
     const savedImages = [];
 
+    // Récupérer le plus grand ordre existant
+    const lastImage = await Gallery.findOne().sort({ order: -1 });
+    let nextOrder = lastImage ? lastImage.order + 1 : 0;
+
     for (const file of uploadedFiles) {
       const newImage = new Gallery({
         imageSrc: file.path,
         imagePublicId: file.filename || `gallery_${Date.now()}`,
+        order: nextOrder++,
       });
       await newImage.save();
       savedImages.push(newImage);
@@ -74,6 +79,29 @@ router.post("/delete-multiple", authMiddleware, async (req, res) => {
   } catch (error) {
     console.error("Error deleting gallery images:", error);
     res.status(500).json({ message: "Error deleting images" });
+  }
+});
+
+// Route pour mise à jour de l'ordre
+router.put("/update-order", authMiddleware, async (req, res) => {
+  try {
+    const { orderedIds } = req.body;
+
+    if (!orderedIds || !Array.isArray(orderedIds)) {
+      return res.status(400).json({ message: "Invalid ordered IDs provided" });
+    }
+
+    // Mettre à jour l'ordre de chaque image
+    const updatePromises = orderedIds.map((id, index) =>
+      Gallery.findByIdAndUpdate(id, { order: index }, { new: true })
+    );
+
+    await Promise.all(updatePromises);
+
+    res.json({ message: "Image order updated successfully" });
+  } catch (error) {
+    console.error("Error updating image order:", error);
+    res.status(500).json({ message: "Error updating image order" });
   }
 });
 
