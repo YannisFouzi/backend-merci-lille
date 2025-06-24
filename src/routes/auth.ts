@@ -1,5 +1,6 @@
 import express from "express";
 import jwt from "jsonwebtoken";
+import { authMiddleware, AuthRequest } from "../middleware/auth";
 import { Admin } from "../models/Admin";
 
 const router = express.Router();
@@ -31,6 +32,16 @@ router.post("/login", async (req, res) => {
     res.json({ token });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Verify token route - nouvelle route pour vérifier la validité du token
+router.get("/verify", authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    // Si on arrive ici, c'est que le token est valide (grâce au middleware)
+    res.json({ valid: true, admin: req.admin });
+  } catch (error) {
+    res.status(401).json({ valid: false, message: "Invalid token" });
   }
 });
 
