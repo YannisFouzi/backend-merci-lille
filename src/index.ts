@@ -98,12 +98,20 @@ app.use((req, res, next) => {
     return next();
   }
 
-  // Vérifier la présence d'un header custom pour les requêtes AJAX
-  const customHeader = req.headers["x-requested-with"];
-  if (!customHeader && req.path.startsWith("/api/")) {
-    return res.status(403).json({
-      message: "Requête non autorisée - Header de sécurité manquant",
-    });
+  // Appliquer CSRF seulement aux routes backend protégées
+  const protectedRoutes = ["/api/auth", "/api/events", "/api/gallery"];
+  const isProtectedRoute = protectedRoutes.some((route) =>
+    req.path.startsWith(route)
+  );
+
+  if (isProtectedRoute) {
+    // Vérifier la présence d'un header custom pour les requêtes AJAX
+    const customHeader = req.headers["x-requested-with"];
+    if (!customHeader) {
+      return res.status(403).json({
+        message: "Requête non autorisée - Header de sécurité manquant",
+      });
+    }
   }
 
   next();
