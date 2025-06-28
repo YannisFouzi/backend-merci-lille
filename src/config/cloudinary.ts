@@ -83,39 +83,67 @@ const galleryStorage = new CloudinaryStorage({
   },
 });
 
-// Configuration Multer pour les événements
+// Configuration Multer pour les événements avec validation MIME
 const eventLimits = {
-  fileSize: 5 * 1024 * 1024, // 5MB
+  fileSize: 3 * 1024 * 1024, // 3MB (réduit de 5MB)
 };
 
-// Configuration Multer pour la galerie
+// Configuration Multer pour la galerie avec validation MIME
 const galleryLimits = {
-  fileSize: 10 * 1024 * 1024, // 10MB
+  fileSize: 5 * 1024 * 1024, // 5MB (réduit de 10MB)
+  files: 10, // Max 10 fichiers (réduit de 100)
 };
 
-// Export des middlewares configurés séparément
+// Validation des types MIME autorisés
+const allowedMimeTypes = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+];
+
+// Fonction de filtrage des fichiers
+const fileFilter = (req: any, file: any, cb: any) => {
+  // Vérifier le type MIME
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(
+      new Error(
+        `Type de fichier non autorisé. Types acceptés: ${allowedMimeTypes.join(
+          ", "
+        )}`
+      ),
+      false
+    );
+  }
+};
+
+// Export des middlewares configurés séparément avec validation
 export const upload = multer({
   storage: storage,
   limits: eventLimits,
+  fileFilter: fileFilter,
 }).single("image");
 
 export const uploadGallery = multer({
   storage: galleryStorage,
   limits: galleryLimits,
-}).array("images", 100);
+  fileFilter: fileFilter,
+}).array("images", 10); // Max 10 images au lieu de 100
 
 // Fonction pour supprimer une image
 export const deleteImage = async (publicId: string) => {
   try {
-    console.log("Attempting to delete image:", publicId);
+    console.log("Attempting to delete image from Cloudinary");
     const result = await cloudinary.uploader.destroy(publicId);
-    console.log("Image deletion result:", result);
+    console.log(
+      `Image deletion ${result.result === "ok" ? "successful" : "failed"}`
+    );
     return result;
   } catch (error) {
-    console.error("Error deleting image from Cloudinary:", {
-      error,
-      publicId,
-    });
+    console.error("Error deleting image from Cloudinary - operation failed");
     throw error;
   }
 };

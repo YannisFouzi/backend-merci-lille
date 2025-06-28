@@ -103,15 +103,4 @@ router.post("/reset-password", async (req, res) => {
   }
 });
 
-router.delete("/clean", async (req, res) => {
-  try {
-    const result = await Admin.deleteMany({});
-    console.log("Admins supprimés:", result);
-    res.json({ message: "All admins deleted", result });
-  } catch (error) {
-    console.error("Erreur suppression:", error);
-    res.status(500).json({ message: "Error deleting admins" });
-  }
-});
-
 export default router;

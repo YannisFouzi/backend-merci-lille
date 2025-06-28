@@ -114,16 +114,12 @@ eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
   next();
 });
 
-// Middleware pour logger les erreurs de validation
+// Middleware pour logger les erreurs de validation (version sécurisée)
 eventSchema.post("save", function (error: any, doc: any, next: any) {
   if (error.name === "ValidationError") {
-    console.log("Validation Error:", {
-      error: error.message,
-      details: Object.values(error.errors).map((err: any) => ({
-        field: err.path,
-        message: err.message,
-        value: err.value,
-      })),
+    console.log("Event validation error occurred:", {
+      errorCount: Object.keys(error.errors).length,
+      fields: Object.keys(error.errors),
     });
   }
   next(error);

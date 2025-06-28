@@ -17,47 +17,81 @@ router.get("/", async (req, res) => {
 });
 
 // Routes protégées
-router.post("/", authMiddleware, uploadGallery, async (req, res) => {
-  try {
-    console.log("Files received:", req.files);
-
-    if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
-      return res.status(400).json({
-        message: "Images are required",
-        details: "No files were uploaded",
-      });
-    }
-
-    const uploadedFiles = req.files;
-    const savedImages = [];
-
-    // Décaler tous les ordres existants pour faire de la place au début
-    const existingImagesCount = await Gallery.countDocuments();
-    if (existingImagesCount > 0) {
-      await Gallery.updateMany({}, { $inc: { order: uploadedFiles.length } });
-    }
-
-    // Ajouter les nouvelles images au début (ordre 0, 1, 2...)
-    for (let i = 0; i < uploadedFiles.length; i++) {
-      const file = uploadedFiles[i];
-      const newImage = new Gallery({
-        imageSrc: file.path,
-        imagePublicId: file.filename || `gallery_${Date.now()}_${i}`,
-        order: i,
-      });
-      await newImage.save();
-      savedImages.push(newImage);
-    }
-
-    res.status(201).json(savedImages);
-  } catch (error) {
-    console.error("Error uploading gallery images:", error);
-    res.status(400).json({
-      message: "Error uploading images",
-      error: error instanceof Error ? error.message : "Unknown error",
+router.post(
+  "/",
+  authMiddleware,
+  (req, res, next) => {
+    uploadGallery(req, res, (err) => {
+      if (err) {
+        if (err.code === "LIMIT_FILE_SIZE") {
+          return res.status(400).json({
+            message: "Fichier trop volumineux",
+            details: "La taille maximale autorisée est de 5MB par image",
+          });
+        }
+        if (err.code === "LIMIT_FILE_COUNT") {
+          return res.status(400).json({
+            message: "Trop de fichiers",
+            details: "Maximum 10 images autorisées par upload",
+          });
+        }
+        if (err.message.includes("Type de fichier non autorisé")) {
+          return res.status(400).json({
+            message: "Type de fichier non autorisé",
+            details: err.message,
+          });
+        }
+        return res.status(400).json({
+          message: "Erreur d'upload",
+          details: err.message,
+        });
+      }
+      next();
     });
+  },
+  async (req, res) => {
+    try {
+      // Log sécurisé pour debug sans exposer le contenu des fichiers
+      console.log(`Upload request: ${req.files?.length || 0} files received`);
+
+      if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
+        return res.status(400).json({
+          message: "Images requises",
+          details: "Aucun fichier n'a été uploadé",
+        });
+      }
+
+      const uploadedFiles = req.files;
+      const savedImages = [];
+
+      // Décaler tous les ordres existants pour faire de la place au début
+      const existingImagesCount = await Gallery.countDocuments();
+      if (existingImagesCount > 0) {
+        await Gallery.updateMany({}, { $inc: { order: uploadedFiles.length } });
+      }
+
+      // Ajouter les nouvelles images au début (ordre 0, 1, 2...)
+      for (let i = 0; i < uploadedFiles.length; i++) {
+        const file = uploadedFiles[i];
+        const newImage = new Gallery({
+          imageSrc: file.path,
+          imagePublicId: file.filename || `gallery_${Date.now()}_${i}`,
+          order: i,
+        });
+        await newImage.save();
+        savedImages.push(newImage);
+      }
+
+      res.status(201).json(savedImages);
+    } catch (error) {
+      console.error("Error uploading gallery images:", error);
+      res.status(400).json({
+        message: "Error uploading images",
+        error: error instanceof Error ? error.message : "Unknown error",
+      });
+    }
   }
-});
+);
 
 // Route pour suppression multiple
 router.post("/delete-multiple", authMiddleware, async (req, res) => {
