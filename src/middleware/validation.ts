@@ -24,12 +24,11 @@ export const handleValidationErrors = (
 export const validateLogin = [
   body("username")
     .trim()
-    .isLength({ min: 3, max: 50 })
-    .withMessage("Le nom d'utilisateur doit contenir entre 3 et 50 caractères")
-    .matches(/^[a-zA-Z0-9_-]+$/)
-    .withMessage(
-      "Le nom d'utilisateur ne peut contenir que des lettres, chiffres, _ et -"
-    ),
+    .isLength({ min: 3, max: 100 })
+    .withMessage("Le nom d'utilisateur doit contenir entre 3 et 100 caractères")
+    // Permet les usernames classiques ET les emails
+    .matches(/^[a-zA-Z0-9_.@-]+$/)
+    .withMessage("Le nom d'utilisateur contient des caractères non autorisés"),
 
   body("password")
     .isLength({ min: 8, max: 128 })
