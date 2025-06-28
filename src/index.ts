@@ -66,9 +66,9 @@ const uploadLimiter = rateLimit({
 
 app.use(generalLimiter);
 
-// Augmenter la limite de taille pour les requêtes
-app.use(express.json({ limit: "30mb" }));
-app.use(express.urlencoded({ limit: "30mb", extended: true }));
+// Limite de taille raisonnable pour les requêtes (sécurité)
+app.use(express.json({ limit: "5mb" }));
+app.use(express.urlencoded({ limit: "5mb", extended: true }));
 
 app.use(
   cors({

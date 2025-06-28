@@ -1,6 +1,7 @@
-import express from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { deleteImage, upload } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
+import { validateEvent, validateEventUpdate } from "../middleware/validation";
 import { Event } from "../models/Event";
 
 const router = express.Router();
@@ -33,8 +34,8 @@ router.get("/:id", async (req, res) => {
 router.post(
   "/",
   authMiddleware,
-  (req, res, next) => {
-    upload(req, res, (err) => {
+  (req: Request, res: Response, next: NextFunction) => {
+    upload(req, res, (err: any) => {
       if (err) {
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
@@ -56,7 +57,8 @@ router.post(
       next();
     });
   },
-  async (req, res) => {
+  validateEvent,
+  async (req: Request, res: Response) => {
     try {
       if (!req.file) {
         return res.status(400).json({
@@ -84,12 +86,12 @@ router.post(
   }
 );
 
-// Mise à jour avec nouvelle image optionnelle
+// Mise à jour avec nouvelle image optionnelle ET validation
 router.put(
   "/:id",
   authMiddleware,
-  (req, res, next) => {
-    upload(req, res, (err) => {
+  (req: Request, res: Response, next: NextFunction) => {
+    upload(req, res, (err: any) => {
       if (err) {
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
@@ -111,7 +113,8 @@ router.put(
       next();
     });
   },
-  async (req, res) => {
+  validateEventUpdate,
+  async (req: Request, res: Response) => {
     try {
       const event = await Event.findById(req.params.id);
       if (!event) {

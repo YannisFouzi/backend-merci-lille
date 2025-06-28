@@ -1,6 +1,7 @@
-import express from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { deleteImage, uploadGallery } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
+import { validateImageIds, validateImageOrder } from "../middleware/validation";
 import { Gallery } from "../models/Gallery";
 
 const router = express.Router();
@@ -20,8 +21,8 @@ router.get("/", async (req, res) => {
 router.post(
   "/",
   authMiddleware,
-  (req, res, next) => {
-    uploadGallery(req, res, (err) => {
+  (req: Request, res: Response, next: NextFunction) => {
+    uploadGallery(req, res, (err: any) => {
       if (err) {
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
@@ -93,58 +94,70 @@ router.post(
   }
 );
 
-// Route pour suppression multiple
-router.post("/delete-multiple", authMiddleware, async (req, res) => {
-  try {
-    const { imageIds } = req.body;
-    if (!imageIds || !Array.isArray(imageIds)) {
-      return res.status(400).json({ message: "Invalid image IDs provided" });
-    }
-
-    const results = [];
-    for (const id of imageIds) {
-      const image = await Gallery.findById(id);
-      if (image) {
-        await deleteImage(image.imagePublicId);
-        await Gallery.findByIdAndDelete(id);
-        results.push({ id, status: "deleted" });
-      } else {
-        results.push({ id, status: "not_found" });
+// Route pour suppression multiple avec validation
+router.post(
+  "/delete-multiple",
+  authMiddleware,
+  validateImageIds,
+  async (req: Request, res: Response) => {
+    try {
+      const { imageIds } = req.body;
+      if (!imageIds || !Array.isArray(imageIds)) {
+        return res.status(400).json({ message: "Invalid image IDs provided" });
       }
+
+      const results = [];
+      for (const id of imageIds) {
+        const image = await Gallery.findById(id);
+        if (image) {
+          await deleteImage(image.imagePublicId);
+          await Gallery.findByIdAndDelete(id);
+          results.push({ id, status: "deleted" });
+        } else {
+          results.push({ id, status: "not_found" });
+        }
+      }
+
+      res.json({ message: "Images deleted successfully", results });
+    } catch (error) {
+      console.error("Error deleting gallery images:", error);
+      res.status(500).json({ message: "Error deleting images" });
     }
-
-    res.json({ message: "Images deleted successfully", results });
-  } catch (error) {
-    console.error("Error deleting gallery images:", error);
-    res.status(500).json({ message: "Error deleting images" });
   }
-});
+);
 
-// Route pour mise à jour de l'ordre
-router.put("/update-order", authMiddleware, async (req, res) => {
-  try {
-    const { orderedIds } = req.body;
+// Route pour mise à jour de l'ordre avec validation
+router.put(
+  "/update-order",
+  authMiddleware,
+  validateImageOrder,
+  async (req: Request, res: Response) => {
+    try {
+      const { orderedIds } = req.body;
 
-    if (!orderedIds || !Array.isArray(orderedIds)) {
-      return res.status(400).json({ message: "Invalid ordered IDs provided" });
+      if (!orderedIds || !Array.isArray(orderedIds)) {
+        return res
+          .status(400)
+          .json({ message: "Invalid ordered IDs provided" });
+      }
+
+      // Mettre à jour l'ordre de chaque image
+      const updatePromises = orderedIds.map((id, index) =>
+        Gallery.findByIdAndUpdate(id, { order: index }, { new: true })
+      );
+
+      await Promise.all(updatePromises);
+
+      res.json({ message: "Image order updated successfully" });
+    } catch (error) {
+      console.error("Error updating image order:", error);
+      res.status(500).json({ message: "Error updating image order" });
     }
-
-    // Mettre à jour l'ordre de chaque image
-    const updatePromises = orderedIds.map((id, index) =>
-      Gallery.findByIdAndUpdate(id, { order: index }, { new: true })
-    );
-
-    await Promise.all(updatePromises);
-
-    res.json({ message: "Image order updated successfully" });
-  } catch (error) {
-    console.error("Error updating image order:", error);
-    res.status(500).json({ message: "Error updating image order" });
   }
-});
+);
 
 // Route pour suppression unique
-router.delete("/:id", authMiddleware, async (req, res) => {
+router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
   try {
     const image = await Gallery.findById(req.params.id);
     if (!image) {
