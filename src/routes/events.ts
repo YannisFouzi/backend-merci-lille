@@ -1,23 +1,28 @@
 import express, { NextFunction, Request, Response } from "express";
 import { deleteImage, upload } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
-import { validateEvent, validateEventUpdate } from "../middleware/validation";
+import {
+  validateEvent,
+  validateEventUpdate,
+  validateUrlId,
+} from "../middleware/validation";
 import { Event } from "../models/Event";
 
 const router = express.Router();
 
 // Routes publiques
-router.get("/", async (req, res) => {
+router.get("/", async (req: Request, res: Response) => {
   try {
     const events = await Event.find().sort({ date: -1 });
     res.json(events);
   } catch (error) {
-    console.error("Error fetching events:", error);
+    console.error("Error fetching events");
     res.status(500).json({ message: "Error fetching events" });
   }
 });
 
-router.get("/:id", async (req, res) => {
+// Validation d'URL ajoutée
+router.get("/:id", validateUrlId, async (req: Request, res: Response) => {
   try {
     const event = await Event.findById(req.params.id);
     if (!event) {
@@ -25,7 +30,7 @@ router.get("/:id", async (req, res) => {
     }
     res.json(event);
   } catch (error) {
-    console.error("Error fetching event:", error);
+    console.error("Error fetching event");
     res.status(500).json({ message: "Error fetching event" });
   }
 });
@@ -86,9 +91,10 @@ router.post(
   }
 );
 
-// Mise à jour avec nouvelle image optionnelle ET validation
+// Mise à jour avec validation d'URL
 router.put(
   "/:id",
+  validateUrlId,
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) => {
     upload(req, res, (err: any) => {
@@ -137,43 +143,40 @@ router.put(
       await event.save();
       res.json(event);
     } catch (error) {
-      console.error("Error updating event:", error);
+      console.error("Error updating event");
       res.status(400).json({
         message: "Error updating event",
-        error: error instanceof Error ? error.message : "Unknown error",
+        error: "Erreur de mise à jour",
       });
     }
   }
 );
 
-// Suppression avec nettoyage de l'image
-router.delete("/:id", authMiddleware, async (req, res) => {
-  try {
-    console.log("Attempting to delete event");
+// Suppression avec validation d'URL et logs nettoyés
+router.delete(
+  "/:id",
+  validateUrlId,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const event = await Event.findById(req.params.id);
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
 
-    const event = await Event.findById(req.params.id);
-    if (!event) {
-      console.log("Event not found for deletion");
-      return res.status(404).json({ message: "Event not found" });
+      if (event.imagePublicId) {
+        await deleteImage(event.imagePublicId);
+      }
+
+      await Event.findByIdAndDelete(req.params.id);
+      res.json({ message: "Event deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting event");
+      res.status(500).json({
+        message: "Error deleting event",
+      });
     }
-
-    if (event.imagePublicId) {
-      console.log("Deleting associated image");
-      await deleteImage(event.imagePublicId);
-    }
-
-    await Event.findByIdAndDelete(req.params.id);
-    console.log("Event deleted successfully");
-
-    res.json({ message: "Event deleted successfully" });
-  } catch (error) {
-    console.error("Erreur suppression:", error);
-    res.status(500).json({
-      message: "Error deleting event",
-      error: error instanceof Error ? error.message : "Unknown error",
-      details: error instanceof Error ? error.toString() : "Unknown error",
-    });
   }
-});
+);
 
 export default router;

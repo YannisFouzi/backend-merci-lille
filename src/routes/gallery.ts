@@ -1,7 +1,11 @@
 import express, { NextFunction, Request, Response } from "express";
 import { deleteImage, uploadGallery } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
-import { validateImageIds, validateImageOrder } from "../middleware/validation";
+import {
+  validateImageIds,
+  validateImageOrder,
+  validateUrlId,
+} from "../middleware/validation";
 import { Gallery } from "../models/Gallery";
 
 const router = express.Router();
@@ -12,7 +16,7 @@ router.get("/", async (req, res) => {
     const images = await Gallery.find().sort({ order: 1, createdAt: -1 });
     res.json(images);
   } catch (error) {
-    console.error("Error fetching gallery images:", error);
+    console.error("Error fetching gallery images");
     res.status(500).json({ message: "Error fetching gallery images" });
   }
 });
@@ -85,7 +89,7 @@ router.post(
 
       res.status(201).json(savedImages);
     } catch (error) {
-      console.error("Error uploading gallery images:", error);
+      console.error("Error uploading gallery images");
       res.status(400).json({
         message: "Error uploading images",
         error: error instanceof Error ? error.message : "Unknown error",
@@ -120,7 +124,7 @@ router.post(
 
       res.json({ message: "Images deleted successfully", results });
     } catch (error) {
-      console.error("Error deleting gallery images:", error);
+      console.error("Error deleting gallery images");
       res.status(500).json({ message: "Error deleting images" });
     }
   }
@@ -150,28 +154,33 @@ router.put(
 
       res.json({ message: "Image order updated successfully" });
     } catch (error) {
-      console.error("Error updating image order:", error);
+      console.error("Error updating image order");
       res.status(500).json({ message: "Error updating image order" });
     }
   }
 );
 
-// Route pour suppression unique
-router.delete("/:id", authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const image = await Gallery.findById(req.params.id);
-    if (!image) {
-      return res.status(404).json({ message: "Image not found" });
+// Route pour suppression unique avec validation d'URL
+router.delete(
+  "/:id",
+  validateUrlId,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const image = await Gallery.findById(req.params.id);
+      if (!image) {
+        return res.status(404).json({ message: "Image not found" });
+      }
+
+      await deleteImage(image.imagePublicId);
+      await Gallery.findByIdAndDelete(req.params.id);
+
+      res.json({ message: "Image deleted successfully" });
+    } catch (error) {
+      console.error("Error deleting gallery image");
+      res.status(500).json({ message: "Error deleting image" });
     }
-
-    await deleteImage(image.imagePublicId);
-    await Gallery.findByIdAndDelete(req.params.id);
-
-    res.json({ message: "Image deleted successfully" });
-  } catch (error) {
-    console.error("Error deleting gallery image:", error);
-    res.status(500).json({ message: "Error deleting image" });
   }
-});
+);
 
 export default router;

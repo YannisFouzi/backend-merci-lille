@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { body, validationResult } from "express-validator";
+import { body, param, validationResult } from "express-validator";
 
 // Middleware pour gérer les erreurs de validation
 export const handleValidationErrors = (
@@ -164,7 +164,14 @@ export const validateEventUpdate = [
   handleValidationErrors,
 ];
 
-// Validation pour les IDs MongoDB
+// Validation pour les paramètres MongoDB ID dans l'URL
+export const validateUrlId = [
+  param("id").isMongoId().withMessage("ID invalide dans l'URL"),
+
+  handleValidationErrors,
+];
+
+// Validation pour les IDs MongoDB dans le body (existant)
 export const validateMongoId = (paramName: string = "id") => [
   body(paramName)
     .optional()

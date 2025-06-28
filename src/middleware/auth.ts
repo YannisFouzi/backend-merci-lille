@@ -45,6 +45,7 @@ export const authMiddleware = (
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET) as {
       id: string;
+      type?: string;
       iat?: number;
       exp?: number;
     };
@@ -57,16 +58,25 @@ export const authMiddleware = (
       });
     }
 
-    req.admin = decoded;
+    // Vérifier que c'est un access token (et non un refresh token)
+    if (decoded.type && decoded.type !== "access") {
+      return res.status(401).json({
+        message: "Authentication required",
+        error: "Invalid token type for this operation",
+      });
+    }
+
+    req.admin = { id: decoded.id };
     next();
   } catch (error) {
-    console.error("Auth middleware error:", error);
+    console.error("Auth middleware error");
 
     // Gestion spécifique des erreurs JWT
     if (error instanceof jwt.TokenExpiredError) {
       return res.status(401).json({
         message: "Authentication required",
         error: "Token has expired",
+        expired: true, // Flag pour que le frontend sache qu'il doit refresh
       });
     }
 

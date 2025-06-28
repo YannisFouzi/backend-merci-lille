@@ -1,5 +1,6 @@
 import cors from "cors";
 import express from "express";
+import mongoSanitize from "express-mongo-sanitize";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { connectDB } from "./config/database";
@@ -27,6 +28,13 @@ app.use(
       },
     },
     crossOriginEmbedderPolicy: false, // Pour Cloudinary
+  })
+);
+
+// Protection contre les injections NoSQL
+app.use(
+  mongoSanitize({
+    replaceWith: "_", // Remplace les caractères dangereux par _
   })
 );
 
@@ -70,12 +78,36 @@ app.use(generalLimiter);
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ limit: "5mb", extended: true }));
 
+// CORS sécurisé
 app.use(
   cors({
     origin: ["https://mercilille.com", "http://localhost:5173"],
     credentials: true,
+    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   })
 );
+
+// Protection CSRF basique pour les requêtes non-GET
+app.use((req, res, next) => {
+  // Ignorer CSRF pour les requêtes GET et les routes publiques
+  if (
+    req.method === "GET" ||
+    (req.path.startsWith("/api/events") && req.method === "GET")
+  ) {
+    return next();
+  }
+
+  // Vérifier la présence d'un header custom pour les requêtes AJAX
+  const customHeader = req.headers["x-requested-with"];
+  if (!customHeader && req.path.startsWith("/api/")) {
+    return res.status(403).json({
+      message: "Requête non autorisée - Header de sécurité manquant",
+    });
+  }
+
+  next();
+});
 
 // Routes avec rate limiting spécifique
 app.use("/api/auth", authLimiter, authRoutes);

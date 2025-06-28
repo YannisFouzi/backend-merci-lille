@@ -6,7 +6,10 @@ import { Admin } from "../models/Admin";
 
 const router = express.Router();
 
-// Login route avec validation
+// Stockage temporaire des refresh tokens (en production : Redis)
+const refreshTokens = new Set<string>();
+
+// Login route avec validation et refresh token
 router.post("/login", validateLogin, async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
@@ -23,14 +26,87 @@ router.post("/login", validateLogin, async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Generate JWT
-    const token = jwt.sign(
-      { id: admin._id },
+    // Generate tokens
+    const accessToken = jwt.sign(
+      { id: admin._id, type: "access" },
       process.env.JWT_SECRET as string,
-      { expiresIn: "7d" }
+      { expiresIn: "15m" } // Token court pour la sécurité
     );
 
-    res.json({ token });
+    const refreshToken = jwt.sign(
+      { id: admin._id, type: "refresh" },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "7d" } // Refresh token plus long
+    );
+
+    // Stocker le refresh token
+    refreshTokens.add(refreshToken);
+
+    // Envoyer les tokens
+    res.json({
+      token: accessToken,
+      refreshToken: refreshToken,
+      expiresIn: 900, // 15 minutes en secondes
+    });
+  } catch (error) {
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
+// Route pour rafraîchir le token
+router.post("/refresh", async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (!refreshToken) {
+      return res.status(401).json({ message: "Refresh token required" });
+    }
+
+    // Vérifier si le refresh token est dans notre store
+    if (!refreshTokens.has(refreshToken)) {
+      return res.status(401).json({ message: "Invalid refresh token" });
+    }
+
+    // Vérifier la validité du refresh token
+    const decoded = jwt.verify(
+      refreshToken,
+      process.env.JWT_SECRET as string
+    ) as {
+      id: string;
+      type: string;
+    };
+
+    if (decoded.type !== "refresh") {
+      return res.status(401).json({ message: "Invalid token type" });
+    }
+
+    // Générer un nouveau access token
+    const newAccessToken = jwt.sign(
+      { id: decoded.id, type: "access" },
+      process.env.JWT_SECRET as string,
+      { expiresIn: "15m" }
+    );
+
+    res.json({
+      token: newAccessToken,
+      expiresIn: 900, // 15 minutes
+    });
+  } catch (error) {
+    return res.status(401).json({ message: "Invalid refresh token" });
+  }
+});
+
+// Logout avec révocation du refresh token
+router.post("/logout", async (req: Request, res: Response) => {
+  try {
+    const { refreshToken } = req.body;
+
+    if (refreshToken) {
+      // Supprimer le refresh token du store
+      refreshTokens.delete(refreshToken);
+    }
+
+    res.json({ message: "Logged out successfully" });
   } catch (error) {
     res.status(500).json({ message: "Server error" });
   }
