@@ -117,6 +117,15 @@ app.use((req, res, next) => {
   next();
 });
 
+// Route de santé pour le ping (sans rate limiting)
+app.get("/health", (req, res) => {
+  res.status(200).json({
+    status: "OK",
+    timestamp: new Date().toISOString(),
+    uptime: process.uptime(),
+  });
+});
+
 // Routes avec rate limiting spécifique
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/events", eventRoutes);
