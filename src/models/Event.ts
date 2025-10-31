@@ -13,6 +13,10 @@ const eventSchema = new mongoose.Schema({
     trim: true,
     unique: true,
   },
+  order: {
+    type: Number,
+    default: 0,
+  },
   city: {
     type: String,
     required: [true, "City is required"],

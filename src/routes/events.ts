@@ -13,7 +13,7 @@ const router = express.Router();
 // Routes publiques
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const events = await Event.find().sort({ date: -1 });
+    const events = await Event.find().sort({ order: 1, createdAt: -1 });
     res.json(events);
   } catch (error) {
     console.error("Error fetching events");
@@ -87,6 +87,53 @@ router.post(
         message: "Error creating event",
         error: error instanceof Error ? error.message : "Unknown error",
       });
+    }
+  }
+);
+
+// Route pour mettre à jour l'ordre des événements (AVANT /:id pour éviter les conflits)
+router.put(
+  "/update-order",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const { orderedIds } = req.body;
+
+      if (!orderedIds || !Array.isArray(orderedIds)) {
+        return res
+          .status(400)
+          .json({ message: "Invalid ordered IDs provided" });
+      }
+
+      // ÉTAPE 1 : Mettre des eventNumber temporaires pour éviter les conflits de unique constraint
+      // On utilise des préfixes "TEMP_" pour éviter les doublons pendant la mise à jour
+      for (let i = 0; i < orderedIds.length; i++) {
+        await Event.findByIdAndUpdate(
+          orderedIds[i],
+          { 
+            order: i,
+            eventNumber: `TEMP_${i}_${Date.now()}`  // Timestamp pour garantir l'unicité
+          }
+        );
+      }
+
+      // ÉTAPE 2 : Renuméroter avec les vrais numéros (ordre inversé)
+      // Le premier visuel (en haut) = dernier numéro, le dernier visuel (en bas) = #001
+      // Car on affiche les événements récents en premier
+      for (let i = 0; i < orderedIds.length; i++) {
+        const paddedNumber = String(orderedIds.length - i).padStart(3, "0");
+        await Event.findByIdAndUpdate(
+          orderedIds[i],
+          { 
+            eventNumber: paddedNumber
+          }
+        );
+      }
+
+      res.json({ message: "Event order updated successfully" });
+    } catch (error) {
+      console.error("Error updating event order:", error);
+      res.status(500).json({ message: "Error updating event order" });
     }
   }
 );
