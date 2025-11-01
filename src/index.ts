@@ -5,6 +5,7 @@ import mongoSanitize from "express-mongo-sanitize";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 import { connectDB } from "./config/database";
+import { initRateLimiter } from "./middleware/rateLimiter";
 import authRoutes from "./routes/auth";
 import eventRoutes from "./routes/events";
 import galleryRoutes from "./routes/gallery";
@@ -129,13 +130,18 @@ app.get("/health", (req, res) => {
 });
 
 // Routes avec rate limiting spécifique
-app.use("/api/auth", authLimiter, authRoutes);
+// Note: Le rate limiting sur /api/auth/login est géré par loginRateLimiter (MongoDB)
+// dans auth.ts - pas besoin de limiter toutes les routes auth
+app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/gallery", uploadLimiter, galleryRoutes);
 app.use("/api/shotgun-sync", shotgunSyncRoutes);
 
 // Connect to database and start server
 connectDB().then(() => {
+  // Initialiser le rate limiter APRÈS connexion MongoDB
+  initRateLimiter();
+  
   app.listen(PORT, () => {
     console.log(`Server running on port ${PORT}`);
   });

@@ -69,7 +69,8 @@ export const authMiddleware = (
     req.admin = { id: decoded.id };
     next();
   } catch (error) {
-    console.error("Auth middleware error");
+    // Log sécurisé (pas de détails d'erreur exposés)
+    console.error("Authentication failed");
 
     // Gestion spécifique des erreurs JWT
     if (error instanceof jwt.TokenExpiredError) {

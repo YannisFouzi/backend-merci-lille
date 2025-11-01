@@ -1,26 +1,32 @@
 import express, { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
+import { loginRateLimiter, consumeLoginAttempt, resetLoginAttempts } from "../middleware/rateLimiter";
 import { validateLogin } from "../middleware/validation";
 import { Admin } from "../models/Admin";
 import { RefreshToken } from "../models/RefreshToken";
 
 const router = express.Router();
 
-// Login route avec validation et refresh token
-router.post("/login", validateLogin, async (req: Request, res: Response) => {
+// Login route avec validation, rate limiting et refresh token
+router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
+    const ip = req.ip || req.socket.remoteAddress || "unknown";
 
     // Find admin
     const admin = await Admin.findOne({ username });
     if (!admin) {
+      // Échec : consommer un point
+      await consumeLoginAttempt(ip);
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
     // Check password
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
+      // Échec : consommer un point
+      await consumeLoginAttempt(ip);
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
@@ -66,6 +72,9 @@ router.post("/login", validateLogin, async (req: Request, res: Response) => {
       isRevoked: false,
     });
 
+    // Succès : réinitialiser le compteur d'échecs
+    await resetLoginAttempts(ip);
+
     // Envoyer les tokens
     res.json({
       token: accessToken,
@@ -73,7 +82,8 @@ router.post("/login", validateLogin, async (req: Request, res: Response) => {
       expiresIn: 900, // 15 minutes en secondes
     });
   } catch (error) {
-    console.error("Login error:", error);
+    // Log sécurisé sans détails sensibles
+    console.error("Login attempt failed");
     res.status(500).json({ message: "Server error" });
   }
 });
@@ -131,7 +141,8 @@ router.post("/refresh", async (req: Request, res: Response) => {
       expiresIn: 900, // 15 minutes
     });
   } catch (error) {
-    console.error("Refresh token error:", error);
+    // Log sécurisé sans détails sensibles
+    console.error("Token refresh failed");
     return res.status(401).json({ message: "Invalid refresh token" });
   }
 });
@@ -151,7 +162,8 @@ router.post("/logout", async (req: Request, res: Response) => {
 
     res.json({ message: "Logged out successfully" });
   } catch (error) {
-    console.error("Logout error:", error);
+    // Log sécurisé sans détails sensibles
+    console.error("Logout attempt failed");
     res.status(500).json({ message: "Server error" });
   }
 });
