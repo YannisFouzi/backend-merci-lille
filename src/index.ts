@@ -17,7 +17,9 @@ const PORT = process.env.PORT || 3000;
 
 // Trust proxy - IMPORTANT pour Render, Heroku, AWS, etc.
 // Permet à Express de lire correctement l'IP du client derrière un proxy inverse
-app.set('trust proxy', true);
+// 1 = Faire confiance UNIQUEMENT au premier proxy (Render)
+// Cela empêche les attaquants de forger des headers X-Forwarded-For
+app.set('trust proxy', 1);
 
 // Middlewares de sécurité
 app.use(
