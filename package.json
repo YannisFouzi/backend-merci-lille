@@ -5,9 +5,10 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "ts-node src/index.ts"
+    "dev": "ts-node -r ./src/env-loader.js src/index.ts"
   },
   "dependencies": {
+    "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.41.0",
     "cors": "^2.8.5",

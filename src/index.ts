@@ -1,3 +1,4 @@
+import "dotenv/config"; // ⚠️ IMPORTANT : Charger les variables d'environnement en PREMIER
 import cors from "cors";
 import express from "express";
 import mongoSanitize from "express-mongo-sanitize";
@@ -7,6 +8,7 @@ import { connectDB } from "./config/database";
 import authRoutes from "./routes/auth";
 import eventRoutes from "./routes/events";
 import galleryRoutes from "./routes/gallery";
+import shotgunSyncRoutes from "./routes/shotgun-sync";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -83,7 +85,7 @@ app.use(
   cors({
     origin: ["https://mercilille.com", "http://localhost:5173"],
     credentials: true,
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   })
 );
@@ -130,6 +132,7 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authLimiter, authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/gallery", uploadLimiter, galleryRoutes);
+app.use("/api/shotgun-sync", shotgunSyncRoutes);
 
 // Connect to database and start server
 connectDB().then(() => {

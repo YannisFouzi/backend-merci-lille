@@ -10,10 +10,64 @@ import { Event } from "../models/Event";
 
 const router = express.Router();
 
+/**
+ * Fonction utilitaire pour renuméroter tous les événements NON masqués
+ * Les événements masqués auront un eventNumber null
+ * Utilise une stratégie en 3 temps pour éviter les conflits de clés uniques
+ */
+async function renumberVisibleEvents() {
+  try {
+    console.log("🔄 Début de la renumérotation...");
+    
+    // ÉTAPE 0 : IMPORTANT - Mettre les événements masqués à des valeurs uniques
+    // On ne peut pas utiliser null car l'index unique ne permet qu'un seul null
+    const hiddenEvents = await Event.find({ isHidden: true });
+    for (const event of hiddenEvents) {
+      await Event.findByIdAndUpdate(event._id, {
+        eventNumber: `HIDDEN_${event._id}`, // Utiliser l'ID pour garantir l'unicité
+      });
+    }
+    console.log(`✅ ${hiddenEvents.length} événement(s) masqué(s) marqué(s)`);
+
+    // Récupérer tous les événements NON masqués, triés par order puis par date de création
+    const visibleEvents = await Event.find({ isHidden: { $ne: true } })
+      .sort({ order: 1, createdAt: -1 });
+
+    console.log(`📋 ${visibleEvents.length} événements visibles à renuméroter`);
+
+    // ÉTAPE 1 : Mettre des numéros temporaires pour éviter les conflits
+    for (let i = 0; i < visibleEvents.length; i++) {
+      await Event.findByIdAndUpdate(visibleEvents[i]._id, {
+        eventNumber: `TEMP_${i}_${Date.now()}`, // Timestamp pour garantir l'unicité
+      });
+    }
+    console.log("✅ Numéros temporaires appliqués");
+
+    // ÉTAPE 2 : Mettre les vrais numéros (001, 002, 003...)
+    for (let i = 0; i < visibleEvents.length; i++) {
+      const newNumber = String(i + 1).padStart(3, "0");
+      await Event.findByIdAndUpdate(visibleEvents[i]._id, {
+        eventNumber: newNumber,
+      });
+    }
+    console.log("✅ Numéros définitifs appliqués");
+
+    console.log(`✅ Renumérotation terminée : ${visibleEvents.length} événements visibles`);
+  } catch (error) {
+    console.error("❌ Erreur lors de la renumérotation:", error);
+    throw error;
+  }
+}
+
 // Routes publiques
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const events = await Event.find().sort({ order: 1, createdAt: -1 });
+    // Si c'est une requête admin (via query param), retourner TOUS les événements
+    // Sinon, filtrer les événements masqués
+    const includeHidden = req.query.includeHidden === "true";
+    const filter = includeHidden ? {} : { isHidden: { $ne: true } };
+    
+    const events = await Event.find(filter).sort({ order: 1, createdAt: -1 });
     res.json(events);
   } catch (error) {
     console.error("Error fetching events");
@@ -216,12 +270,139 @@ router.delete(
       }
 
       await Event.findByIdAndDelete(req.params.id);
+      
+      // Renuméroter tous les événements visibles après suppression
+      await renumberVisibleEvents();
+      
       res.json({ message: "Event deleted successfully" });
     } catch (error) {
       console.error("Error deleting event");
       res.status(500).json({
         message: "Error deleting event",
       });
+    }
+  }
+);
+
+// Masquer un événement
+router.patch(
+  "/:id/hide",
+  validateUrlId,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const event = await Event.findByIdAndUpdate(
+        req.params.id,
+        { isHidden: true },
+        { new: true }
+      );
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      
+      // Renuméroter tous les événements visibles
+      await renumberVisibleEvents();
+      
+      res.json(event);
+    } catch (error) {
+      console.error("Error hiding event");
+      res.status(500).json({ message: "Error hiding event" });
+    }
+  }
+);
+
+// Démasquer un événement
+router.patch(
+  "/:id/unhide",
+  validateUrlId,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const event = await Event.findByIdAndUpdate(
+        req.params.id,
+        { isHidden: false },
+        { new: true }
+      );
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      
+      // Renuméroter tous les événements visibles
+      await renumberVisibleEvents();
+      
+      res.json(event);
+    } catch (error) {
+      console.error("Error unhiding event");
+      res.status(500).json({ message: "Error unhiding event" });
+    }
+  }
+);
+
+// Masquer plusieurs événements
+router.post(
+  "/hide-multiple",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const { eventIds } = req.body;
+      if (!eventIds || !Array.isArray(eventIds)) {
+        return res.status(400).json({ message: "Invalid event IDs provided" });
+      }
+
+      await Event.updateMany(
+        { _id: { $in: eventIds } },
+        { isHidden: true }
+      );
+
+      // Renuméroter tous les événements visibles
+      await renumberVisibleEvents();
+
+      res.json({ message: `${eventIds.length} event(s) hidden successfully` });
+    } catch (error) {
+      console.error("Error hiding events");
+      res.status(500).json({ message: "Error hiding events" });
+    }
+  }
+);
+
+// Démasquer plusieurs événements
+router.post(
+  "/unhide-multiple",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const { eventIds } = req.body;
+      if (!eventIds || !Array.isArray(eventIds)) {
+        return res.status(400).json({ message: "Invalid event IDs provided" });
+      }
+
+      await Event.updateMany(
+        { _id: { $in: eventIds } },
+        { isHidden: false }
+      );
+
+      // Renuméroter tous les événements visibles
+      await renumberVisibleEvents();
+
+      res.json({ message: `${eventIds.length} event(s) unhidden successfully` });
+    } catch (error) {
+      console.error("Error unhiding events");
+      res.status(500).json({ message: "Error unhiding events" });
+    }
+  }
+);
+
+// Route utilitaire pour forcer la renumérotation (pour corriger manuellement si besoin)
+router.post(
+  "/renumber-all",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      await renumberVisibleEvents();
+      res.json({ message: "All visible events renumbered successfully" });
+    } catch (error) {
+      console.error("Error renumbering events");
+      res.status(500).json({ message: "Error renumbering events" });
     }
   }
 );

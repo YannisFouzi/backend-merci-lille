@@ -12,6 +12,7 @@ const eventSchema = new mongoose.Schema({
     required: false,
     trim: true,
     unique: true,
+    sparse: true, // Permet d'avoir plusieurs documents avec eventNumber null
   },
   order: {
     type: Number,
@@ -72,6 +73,16 @@ const eventSchema = new mongoose.Schema({
     type: String,
     required: [true, "Image public ID is required"],
   },
+  shotgunId: {
+    type: Number,
+    required: false,
+    unique: true,
+    sparse: true, // Permet d'avoir plusieurs documents avec shotgunId null
+  },
+  isHidden: {
+    type: Boolean,
+    default: false,
+  },
   createdAt: {
     type: Date,
     default: Date.now,
@@ -84,22 +95,34 @@ const eventSchema = new mongoose.Schema({
 
 // Middleware pour parser les genres si c'est une string JSON
 eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
+  // Générer un eventNumber approprié selon si l'événement est masqué ou non
   if (!this.eventNumber) {
-    try {
-      const lastEvent = await mongoose
-        .model("Event")
-        .findOne({})
-        .sort({ eventNumber: -1 });
+    if (this.isHidden) {
+      // Pour les événements masqués, utiliser HIDDEN_{id}
+      this.eventNumber = `HIDDEN_${this._id}`;
+    } else {
+      // Pour les événements visibles, générer un numéro consécutif
+      try {
+        // Trouver le dernier événement NON masqué avec un numéro valide (pas HIDDEN_ ou TEMP_)
+        const lastEvent = await mongoose
+          .model("Event")
+          .findOne({ 
+            isHidden: { $ne: true },
+            eventNumber: { $regex: /^[0-9]+$/ } // Seulement les numéros numériques
+          })
+          .sort({ eventNumber: -1 });
 
-      const nextNumber = lastEvent
-        ? String(Number(lastEvent.eventNumber) + 1)
-        : "1";
+        const nextNumber = lastEvent && lastEvent.eventNumber
+          ? String(Number(lastEvent.eventNumber) + 1)
+          : "1";
 
-      this.eventNumber = nextNumber.padStart(3, "0");
-    } catch (error) {
-      return next(error as CallbackError);
+        this.eventNumber = nextNumber.padStart(3, "0");
+      } catch (error) {
+        return next(error as CallbackError);
+      }
     }
-  } else {
+  } else if (this.eventNumber && !this.eventNumber.startsWith("HIDDEN_") && !this.eventNumber.startsWith("TEMP_")) {
+    // Formater les numéros numériques existants
     this.eventNumber = this.eventNumber.padStart(3, "0");
   }
   try {
