@@ -15,6 +15,10 @@ import shotgunSyncRoutes from "./routes/shotgun-sync";
 const app = express();
 const PORT = process.env.PORT || 3000;
 
+// Trust proxy - IMPORTANT pour Render, Heroku, AWS, etc.
+// Permet à Express de lire correctement l'IP du client derrière un proxy inverse
+app.set('trust proxy', true);
+
 // Middlewares de sécurité
 app.use(
   helmet({
