@@ -75,10 +75,28 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
     // Succès : réinitialiser le compteur d'échecs
     await resetLoginAttempts(ip);
 
-    // Envoyer les tokens
+    // Configuration des cookies sécurisés
+    const isProduction = process.env.NODE_ENV === "production";
+    
+    // Cookie pour l'access token (15 minutes)
+    res.cookie("accessToken", accessToken, {
+      httpOnly: true, // Pas accessible en JavaScript (protection XSS)
+      secure: isProduction, // HTTPS uniquement en production
+      sameSite: "strict", // Protection CSRF
+      maxAge: 15 * 60 * 1000, // 15 minutes en ms
+    });
+
+    // Cookie pour le refresh token (7 jours)
+    res.cookie("refreshToken", refreshTokenString, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours en ms
+    });
+
+    // Envoyer une réponse de succès (sans les tokens dans le body)
     res.json({
-      token: accessToken,
-      refreshToken: refreshTokenString,
+      message: "Login successful",
       expiresIn: 900, // 15 minutes en secondes
     });
   } catch (error) {
@@ -91,7 +109,8 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
 // Route pour rafraîchir le token
 router.post("/refresh", async (req: Request, res: Response) => {
   try {
-    const { refreshToken } = req.body;
+    // Lire le refresh token depuis les cookies au lieu du body
+    const refreshToken = req.cookies.refreshToken;
 
     if (!refreshToken) {
       return res.status(401).json({ message: "Refresh token required" });
@@ -136,8 +155,19 @@ router.post("/refresh", async (req: Request, res: Response) => {
       { expiresIn: "15m" }
     );
 
+    // Configuration des cookies sécurisés
+    const isProduction = process.env.NODE_ENV === "production";
+
+    // Envoyer le nouveau access token en cookie httpOnly
+    res.cookie("accessToken", newAccessToken, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: "strict",
+      maxAge: 15 * 60 * 1000, // 15 minutes en ms
+    });
+
     res.json({
-      token: newAccessToken,
+      message: "Token refreshed successfully",
       expiresIn: 900, // 15 minutes
     });
   } catch (error) {
@@ -150,7 +180,8 @@ router.post("/refresh", async (req: Request, res: Response) => {
 // Logout avec révocation du refresh token
 router.post("/logout", async (req: Request, res: Response) => {
   try {
-    const { refreshToken } = req.body;
+    // Lire le refresh token depuis les cookies
+    const refreshToken = req.cookies.refreshToken;
 
     if (refreshToken) {
       // Révoquer le refresh token dans MongoDB
@@ -159,6 +190,10 @@ router.post("/logout", async (req: Request, res: Response) => {
         { isRevoked: true }
       );
     }
+
+    // Effacer les cookies
+    res.clearCookie("accessToken");
+    res.clearCookie("refreshToken");
 
     res.json({ message: "Logged out successfully" });
   } catch (error) {

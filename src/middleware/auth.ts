@@ -11,23 +11,16 @@ export const authMiddleware = (
   next: NextFunction
 ) => {
   try {
-    const authHeader = req.header("Authorization");
+    // Lire le token depuis les cookies (priorité 1)
+    let token = req.cookies?.accessToken;
 
-    if (!authHeader) {
-      return res.status(401).json({
-        message: "Authentication required",
-        error: "No authorization header provided",
-      });
+    // Fallback : lire depuis le header Authorization (pour compatibilité)
+    if (!token) {
+      const authHeader = req.header("Authorization");
+      if (authHeader && authHeader.startsWith("Bearer ")) {
+        token = authHeader.replace("Bearer ", "");
+      }
     }
-
-    if (!authHeader.startsWith("Bearer ")) {
-      return res.status(401).json({
-        message: "Authentication required",
-        error: "Invalid authorization format",
-      });
-    }
-
-    const token = authHeader.replace("Bearer ", "");
 
     if (!token) {
       return res.status(401).json({

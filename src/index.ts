@@ -1,4 +1,5 @@
 import "dotenv/config"; // ⚠️ IMPORTANT : Charger les variables d'environnement en PREMIER
+import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import mongoSanitize from "express-mongo-sanitize";
@@ -76,6 +77,9 @@ const uploadLimiter = rateLimit({
 });
 
 app.use(generalLimiter);
+
+// Cookie parser pour les cookies httpOnly (sécurité)
+app.use(cookieParser());
 
 // Limite de taille raisonnable pour les requêtes (sécurité)
 app.use(express.json({ limit: "5mb" }));
