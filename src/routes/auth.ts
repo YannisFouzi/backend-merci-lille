@@ -76,12 +76,14 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
     await resetLoginAttempts(ip);
 
     // Configuration des cookies sécurisés
-    const isProduction = process.env.NODE_ENV === "production";
+    // Détection automatique HTTPS : req.secure est true si la connexion est HTTPS
+    // (fonctionne correctement grâce à trust proxy configuré)
+    const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
     
     // Cookie pour l'access token (15 minutes)
     res.cookie("accessToken", accessToken, {
       httpOnly: true, // Pas accessible en JavaScript (protection XSS)
-      secure: isProduction, // HTTPS uniquement en production
+      secure: isSecure, // HTTPS uniquement (détection automatique)
       sameSite: "strict", // Protection CSRF
       maxAge: 15 * 60 * 1000, // 15 minutes en ms
     });
@@ -89,7 +91,7 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
     // Cookie pour le refresh token (7 jours)
     res.cookie("refreshToken", refreshTokenString, {
       httpOnly: true,
-      secure: isProduction,
+      secure: isSecure,
       sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours en ms
     });
@@ -156,12 +158,13 @@ router.post("/refresh", async (req: Request, res: Response) => {
     );
 
     // Configuration des cookies sécurisés
-    const isProduction = process.env.NODE_ENV === "production";
+    // Détection automatique HTTPS
+    const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
 
     // Envoyer le nouveau access token en cookie httpOnly
     res.cookie("accessToken", newAccessToken, {
       httpOnly: true,
-      secure: isProduction,
+      secure: isSecure,
       sameSite: "strict",
       maxAge: 15 * 60 * 1000, // 15 minutes en ms
     });
