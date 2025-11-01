@@ -8,7 +8,13 @@
     "dev": "ts-node -r ./src/env-loader.js src/index.ts"
   },
   "dependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/cookie-parser": "^1.4.10",
+    "@types/cors": "^2.8.19",
+    "@types/express": "^4.17.21",
+    "@types/jsonwebtoken": "^9.0.10",
+    "@types/multer": "^1.4.13",
+    "@types/node": "^20.17.0",
     "axios": "^1.6.2",
     "bcryptjs": "^2.4.3",
     "cloudinary": "^1.41.0",
@@ -24,19 +30,13 @@
     "mongoose": "^8.0.3",
     "multer": "^1.4.5-lts.1",
     "multer-storage-cloudinary": "^4.0.0",
-    "rate-limiter-flexible": "^8.1.0"
+    "rate-limiter-flexible": "^8.1.0",
+    "typescript": "^5.2.2"
   },
   "devDependencies": {
-    "@types/bcryptjs": "^2.4.6",
-    "@types/cors": "^2.8.19",
-    "@types/express": "^4.17.21",
-    "@types/jsonwebtoken": "^9.0.10",
-    "@types/multer": "^1.4.13",
-    "@types/node": "^20.17.0",
     "nodemon": "^3.0.1",
     "ts-node": "^10.9.1",
-    "ts-node-dev": "^2.0.0",
-    "typescript": "^5.2.2"
+    "ts-node-dev": "^2.0.0"
   },
   "keywords": [],
   "author": "",
