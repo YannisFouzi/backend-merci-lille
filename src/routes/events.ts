@@ -407,4 +407,98 @@ router.post(
   }
 );
 
+// Marquer un événement comme phare
+router.patch(
+  "/:id/feature",
+  validateUrlId,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const event = await Event.findByIdAndUpdate(
+        req.params.id,
+        { isFeatured: true },
+        { new: true }
+      );
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      res.json(event);
+    } catch (error) {
+      console.error("Error featuring event");
+      res.status(500).json({ message: "Error featuring event" });
+    }
+  }
+);
+
+// Retirer le statut phare d'un événement
+router.patch(
+  "/:id/unfeature",
+  validateUrlId,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const event = await Event.findByIdAndUpdate(
+        req.params.id,
+        { isFeatured: false },
+        { new: true }
+      );
+      if (!event) {
+        return res.status(404).json({ message: "Event not found" });
+      }
+      res.json(event);
+    } catch (error) {
+      console.error("Error unfeaturing event");
+      res.status(500).json({ message: "Error unfeaturing event" });
+    }
+  }
+);
+
+// Marquer plusieurs événements comme phares
+router.post(
+  "/feature-multiple",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const { eventIds } = req.body;
+      if (!eventIds || !Array.isArray(eventIds)) {
+        return res.status(400).json({ message: "Invalid event IDs provided" });
+      }
+
+      await Event.updateMany(
+        { _id: { $in: eventIds } },
+        { isFeatured: true }
+      );
+
+      res.json({ message: `${eventIds.length} event(s) marked as featured successfully` });
+    } catch (error) {
+      console.error("Error featuring events");
+      res.status(500).json({ message: "Error featuring events" });
+    }
+  }
+);
+
+// Retirer le statut phare de plusieurs événements
+router.post(
+  "/unfeature-multiple",
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const { eventIds } = req.body;
+      if (!eventIds || !Array.isArray(eventIds)) {
+        return res.status(400).json({ message: "Invalid event IDs provided" });
+      }
+
+      await Event.updateMany(
+        { _id: { $in: eventIds } },
+        { isFeatured: false }
+      );
+
+      res.json({ message: `${eventIds.length} event(s) unmarked as featured successfully` });
+    } catch (error) {
+      console.error("Error unfeaturing events");
+      res.status(500).json({ message: "Error unfeaturing events" });
+    }
+  }
+);
+
 export default router;
