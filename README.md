@@ -684,7 +684,7 @@ Vérifier l'état du serveur
 
 #### Autres protections
 
-- ✅ **Trust proxy** configuré pour Render/Heroku
+- ✅ **Trust proxy** configuré pour Railway/Render/Heroku
 - ✅ **Limite de taille des requêtes** : 5MB
 - ✅ **CORS** strictement configuré
 - ✅ **Logs sécurisés** sans données sensibles
@@ -872,6 +872,7 @@ Utilisez MongoDB Atlas pour la production :
 #### Logs
 
 Les logs sont écrits dans la console. Utilisez un service comme :
+- **Railway** : Logs intégrés dans le dashboard
 - **Render** : Logs intégrés
 - **Loggly**
 - **Papertrail**

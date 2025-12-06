@@ -1,4 +1,4 @@
-import express, { NextFunction, Request, Response } from "express";
+﻿import express, { NextFunction, Request, Response } from "express";
 import { deleteImage, uploadGallery } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
 import {
@@ -7,6 +7,7 @@ import {
   validateUrlId,
 } from "../middleware/validation";
 import { Gallery } from "../models/Gallery";
+import { logger } from "../utils/logger";
 
 const router = express.Router();
 
@@ -16,12 +17,12 @@ router.get("/", async (req, res) => {
     const images = await Gallery.find().sort({ order: 1, createdAt: -1 });
     res.json(images);
   } catch (error) {
-    console.error("Error fetching gallery images");
+    logger.error("Error fetching gallery images");
     res.status(500).json({ message: "Error fetching gallery images" });
   }
 });
 
-// Routes protégées
+// Routes protÃ©gÃ©es
 router.post(
   "/",
   authMiddleware,
@@ -31,18 +32,18 @@ router.post(
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: "Fichier trop volumineux",
-            details: "La taille maximale autorisée est de 5MB par image",
+            details: "La taille maximale autorisÃ©e est de 5MB par image",
           });
         }
         if (err.code === "LIMIT_FILE_COUNT") {
           return res.status(400).json({
             message: "Trop de fichiers",
-            details: "Maximum 10 images autorisées par upload",
+            details: "Maximum 10 images autorisÃ©es par upload",
           });
         }
-        if (err.message.includes("Type de fichier non autorisé")) {
+        if (err.message.includes("Type de fichier non autorisÃ©")) {
           return res.status(400).json({
-            message: "Type de fichier non autorisé",
+            message: "Type de fichier non autorisÃ©",
             details: err.message,
           });
         }
@@ -56,26 +57,26 @@ router.post(
   },
   async (req, res) => {
     try {
-      // Log sécurisé pour debug sans exposer le contenu des fichiers
-      console.log(`Upload request: ${req.files?.length || 0} files received`);
+      // Log sÃ©curisÃ© pour debug sans exposer le contenu des fichiers
+      logger.info(`Upload request: ${req.files?.length || 0} files received`);
 
       if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
         return res.status(400).json({
           message: "Images requises",
-          details: "Aucun fichier n'a été uploadé",
+          details: "Aucun fichier n'a Ã©tÃ© uploadÃ©",
         });
       }
 
       const uploadedFiles = req.files;
       const savedImages = [];
 
-      // Décaler tous les ordres existants pour faire de la place au début
+      // DÃ©caler tous les ordres existants pour faire de la place au dÃ©but
       const existingImagesCount = await Gallery.countDocuments();
       if (existingImagesCount > 0) {
         await Gallery.updateMany({}, { $inc: { order: uploadedFiles.length } });
       }
 
-      // Ajouter les nouvelles images au début (ordre 0, 1, 2...)
+      // Ajouter les nouvelles images au dÃ©but (ordre 0, 1, 2...)
       for (let i = 0; i < uploadedFiles.length; i++) {
         const file = uploadedFiles[i];
         const newImage = new Gallery({
@@ -89,7 +90,7 @@ router.post(
 
       res.status(201).json(savedImages);
     } catch (error) {
-      console.error("Error uploading gallery images");
+      logger.error("Error uploading gallery images");
       res.status(400).json({
         message: "Error uploading images",
         error: error instanceof Error ? error.message : "Unknown error",
@@ -124,13 +125,13 @@ router.post(
 
       res.json({ message: "Images deleted successfully", results });
     } catch (error) {
-      console.error("Error deleting gallery images");
+      logger.error("Error deleting gallery images");
       res.status(500).json({ message: "Error deleting images" });
     }
   }
 );
 
-// Route pour mise à jour de l'ordre avec validation
+// Route pour mise Ã  jour de l'ordre avec validation
 router.put(
   "/update-order",
   authMiddleware,
@@ -145,7 +146,7 @@ router.put(
           .json({ message: "Invalid ordered IDs provided" });
       }
 
-      // Mettre à jour l'ordre de chaque image
+      // Mettre Ã  jour l'ordre de chaque image
       const updatePromises = orderedIds.map((id, index) =>
         Gallery.findByIdAndUpdate(id, { order: index }, { new: true })
       );
@@ -154,7 +155,7 @@ router.put(
 
       res.json({ message: "Image order updated successfully" });
     } catch (error) {
-      console.error("Error updating image order");
+      logger.error("Error updating image order");
       res.status(500).json({ message: "Error updating image order" });
     }
   }
@@ -177,10 +178,11 @@ router.delete(
 
       res.json({ message: "Image deleted successfully" });
     } catch (error) {
-      console.error("Error deleting gallery image");
+      logger.error("Error deleting gallery image");
       res.status(500).json({ message: "Error deleting image" });
     }
   }
 );
 
 export default router;
+

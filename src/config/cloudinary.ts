@@ -2,6 +2,7 @@ import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 import multer from "multer";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
+import { logger } from "../utils/logger";
 
 dotenv.config();
 
@@ -136,14 +137,18 @@ export const uploadGallery = multer({
 // Fonction pour supprimer une image
 export const deleteImage = async (publicId: string) => {
   try {
-    console.log("Attempting to delete image from Cloudinary");
+    logger.info("Attempting to delete image from Cloudinary");
     const result = await cloudinary.uploader.destroy(publicId);
-    console.log(
-      `Image deletion ${result.result === "ok" ? "successful" : "failed"}`
+    logger.info(
+      {
+        status: result.result,
+        publicId,
+      },
+      "Cloudinary delete result"
     );
     return result;
   } catch (error) {
-    console.error("Error deleting image from Cloudinary - operation failed");
+    logger.error({ err: error, publicId }, "Error deleting image from Cloudinary");
     throw error;
   }
 };

@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import { logger } from "../utils/logger";
 type CallbackError = Error | undefined;
 
 const eventSchema = new mongoose.Schema({
@@ -138,7 +139,7 @@ eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
         : [];
     }
   } catch (e) {
-    console.error("Error processing genres:", e);
+    logger.error({ err: e }, "Error processing genres");
     this.genres = [];
   }
 
@@ -148,10 +149,13 @@ eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
 // Middleware pour logger les erreurs de validation (version sécurisée)
 eventSchema.post("save", function (error: any, doc: any, next: any) {
   if (error.name === "ValidationError") {
-    console.log("Event validation error occurred:", {
-      errorCount: Object.keys(error.errors).length,
-      fields: Object.keys(error.errors),
-    });
+    logger.warn(
+      {
+        errorCount: Object.keys(error.errors).length,
+        fields: Object.keys(error.errors),
+      },
+      "Event validation error occurred"
+    );
   }
   next(error);
 });

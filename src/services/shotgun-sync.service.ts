@@ -1,5 +1,6 @@
-import axios from "axios";
+﻿import axios from "axios";
 import { Event } from "../models/Event";
+import { logger } from "../utils/logger";
 import { shotgunService, ShotgunEvent } from "./shotgun.service";
 
 interface SyncResult {
@@ -11,7 +12,7 @@ interface SyncResult {
 
 class ShotgunSyncService {
   /**
-   * Télécharge une image depuis une URL et retourne un buffer
+   * TÃ©lÃ©charge une image depuis une URL et retourne un buffer
    */
   private async downloadImage(imageUrl: string): Promise<Buffer | null> {
     try {
@@ -20,7 +21,7 @@ class ShotgunSyncService {
       });
       return Buffer.from(response.data);
     } catch (error) {
-      console.error(`❌ Failed to download image from ${imageUrl}:`, error);
+      logger.error({ err: error, imageUrl }, "Failed to download image");
       return null;
     }
   }
@@ -55,13 +56,13 @@ class ShotgunSyncService {
         uploadStream.end(imageBuffer);
       });
     } catch (error) {
-      console.error("❌ Failed to upload to Cloudinary:", error);
+      logger.error({ err: error }, "Failed to upload to Cloudinary");
       return null;
     }
   }
 
   /**
-   * Convertit un événement Shotgun vers le format de notre modèle Event
+   * Convertit un Ã©vÃ©nement Shotgun vers le format de notre modÃ¨le Event
    */
   private async mapShotgunEventToEvent(
     shotgunEvent: ShotgunEvent
@@ -73,7 +74,7 @@ class ShotgunSyncService {
       minute: "2-digit",
     });
 
-    // Télécharger et uploader l'image
+    // TÃ©lÃ©charger et uploader l'image
     let imageSrc = "";
     let imagePublicId = "";
 
@@ -89,7 +90,7 @@ class ShotgunSyncService {
       }
     }
 
-    // Déterminer si c'est gratuit ou payant
+    // DÃ©terminer si c'est gratuit ou payant
     const minPrice = shotgunEvent.deals && shotgunEvent.deals.length > 0
       ? Math.min(...shotgunEvent.deals.map(d => d.price))
       : 0;
@@ -97,7 +98,7 @@ class ShotgunSyncService {
     const isFree = minPrice === 0;
     const price = isFree ? "0" : minPrice.toString();
 
-    // Déterminer si l'événement est passé
+    // DÃ©terminer si l'Ã©vÃ©nement est passÃ©
     const isPast = startDate < new Date();
 
     // Extraire les genres
@@ -107,7 +108,7 @@ class ShotgunSyncService {
 
     return {
       title: shotgunEvent.name,
-      city: shotgunEvent.geolocation?.venue || shotgunEvent.geolocation?.city || "Lille", // Utiliser le nom du venue en priorité
+      city: shotgunEvent.geolocation?.venue || shotgunEvent.geolocation?.city || "Lille", // Utiliser le nom du venue en prioritÃ©
       country: "", // Laisser vide pour afficher uniquement le venue
       date: startDate,
       time: time,
@@ -118,13 +119,13 @@ class ShotgunSyncService {
       isPast: isPast,
       imageSrc: imageSrc,
       imagePublicId: imagePublicId,
-      // Stocker l'ID Shotgun pour éviter les doublons
+      // Stocker l'ID Shotgun pour Ã©viter les doublons
       shotgunId: shotgunEvent.id,
     };
   }
 
   /**
-   * Synchronise tous les événements depuis Shotgun
+   * Synchronise tous les Ã©vÃ©nements depuis Shotgun
    */
   async syncAllEvents(): Promise<SyncResult> {
     const result: SyncResult = {
@@ -135,22 +136,22 @@ class ShotgunSyncService {
     };
 
     try {
-      console.log("🔄 Starting Shotgun events synchronization...");
+      logger.info("ðŸ”„ Starting Shotgun events synchronization...");
 
-      // Récupérer les événements depuis Shotgun
+      // RÃ©cupÃ©rer les Ã©vÃ©nements depuis Shotgun
       const shotgunEvents = await shotgunService.fetchOrganizerEvents();
 
       if (shotgunEvents.length === 0) {
-        console.log("ℹ️  No events found on Shotgun");
+        logger.info("â„¹ï¸  No events found on Shotgun");
         return result;
       }
 
-      console.log(`📥 Processing ${shotgunEvents.length} events...`);
+      logger.info(`ðŸ“¥ Processing ${shotgunEvents.length} events...`);
 
-      // Traiter chaque événement
+      // Traiter chaque Ã©vÃ©nement
       for (const shotgunEvent of shotgunEvents) {
         try {
-          // Vérifier si l'événement existe déjà (par ID Shotgun)
+          // VÃ©rifier si l'Ã©vÃ©nement existe dÃ©jÃ  (par ID Shotgun)
           const existingEvent = await Event.findOne({
             shotgunId: shotgunEvent.id,
           });
@@ -158,8 +159,8 @@ class ShotgunSyncService {
           const mappedData = await this.mapShotgunEventToEvent(shotgunEvent);
 
           if (!mappedData.imageSrc) {
-            console.warn(
-              `⚠️  Skipping event "${shotgunEvent.name}" - no image available`
+            logger.warn(
+              `âš ï¸  Skipping event "${shotgunEvent.name}" - no image available`
             );
             result.errors.push(
               `Event "${shotgunEvent.name}": Image upload failed`
@@ -168,37 +169,37 @@ class ShotgunSyncService {
           }
 
           if (existingEvent) {
-            // Mettre à jour l'événement existant
+            // Mettre Ã  jour l'Ã©vÃ©nement existant
             Object.assign(existingEvent, mappedData);
             await existingEvent.save();
             result.updated++;
             result.syncedEvents.push(existingEvent);
-            console.log(`✏️  Updated: ${shotgunEvent.name}`);
+            logger.info(`âœï¸  Updated: ${shotgunEvent.name}`);
           } else {
-            // Créer un nouvel événement
+            // CrÃ©er un nouvel Ã©vÃ©nement
             const newEvent = new Event(mappedData);
             await newEvent.save();
             result.created++;
             result.syncedEvents.push(newEvent);
-            console.log(`✅ Created: ${shotgunEvent.name}`);
+            logger.info(`âœ… Created: ${shotgunEvent.name}`);
           }
         } catch (error) {
           const errorMessage = `Failed to sync event "${shotgunEvent.name}": ${
             error instanceof Error ? error.message : "Unknown error"
           }`;
-          console.error(`❌ ${errorMessage}`);
+          logger.error({ errorMessage }, "Shotgun sync error");
           result.errors.push(errorMessage);
         }
       }
 
-      console.log(
-        `✅ Sync completed: ${result.created} created, ${result.updated} updated, ${result.errors.length} errors`
+      logger.info(
+        `âœ… Sync completed: ${result.created} created, ${result.updated} updated, ${result.errors.length} errors`
       );
     } catch (error) {
       const errorMessage = `Sync failed: ${
         error instanceof Error ? error.message : "Unknown error"
       }`;
-      console.error(`❌ ${errorMessage}`);
+      logger.error({ errorMessage }, "Shotgun sync error");
       result.errors.push(errorMessage);
     }
 
@@ -206,7 +207,7 @@ class ShotgunSyncService {
   }
 
   /**
-   * Synchronise un événement spécifique par son ID Shotgun
+   * Synchronise un Ã©vÃ©nement spÃ©cifique par son ID Shotgun
    */
   async syncEventById(shotgunEventId: number): Promise<any> {
     try {
@@ -238,4 +239,6 @@ class ShotgunSyncService {
 
 export const shotgunSyncService = new ShotgunSyncService();
 export type { SyncResult };
+
+
 

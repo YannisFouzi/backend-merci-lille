@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
+import { logger } from "../utils/logger";
 
 export interface AuthRequest extends Request {
   admin?: { id: string };
@@ -30,7 +31,7 @@ export const authMiddleware = (
     }
 
     if (!process.env.JWT_SECRET) {
-      console.error("JWT_SECRET is not defined in environment variables");
+      logger.error("JWT_SECRET is not defined in environment variables");
       return res.status(500).json({
         message: "Server configuration error",
       });
@@ -63,7 +64,7 @@ export const authMiddleware = (
     next();
   } catch (error) {
     // Log sécurisé (pas de détails d'erreur exposés)
-    console.error("Authentication failed");
+    logger.warn("Authentication failed");
 
     // Gestion spécifique des erreurs JWT
     if (error instanceof jwt.TokenExpiredError) {

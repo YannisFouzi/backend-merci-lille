@@ -1,4 +1,4 @@
-import express, { NextFunction, Request, Response } from "express";
+﻿import express, { NextFunction, Request, Response } from "express";
 import { deleteImage, upload } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
 import {
@@ -7,54 +7,55 @@ import {
   validateUrlId,
 } from "../middleware/validation";
 import { Event } from "../models/Event";
+import { logger } from "../utils/logger";
 
 const router = express.Router();
 
 /**
- * Fonction utilitaire pour renuméroter tous les événements NON masqués
- * Les événements masqués auront un eventNumber null
- * Utilise une stratégie en 3 temps pour éviter les conflits de clés uniques
+ * Fonction utilitaire pour renumÃ©roter tous les Ã©vÃ©nements NON masquÃ©s
+ * Les Ã©vÃ©nements masquÃ©s auront un eventNumber null
+ * Utilise une stratÃ©gie en 3 temps pour Ã©viter les conflits de clÃ©s uniques
  */
 async function renumberVisibleEvents() {
   try {
-    console.log("🔄 Début de la renumérotation...");
+    logger.info("ðŸ”„ DÃ©but de la renumÃ©rotation...");
     
-    // ÉTAPE 0 : IMPORTANT - Mettre les événements masqués à des valeurs uniques
+    // Ã‰TAPE 0 : IMPORTANT - Mettre les Ã©vÃ©nements masquÃ©s Ã  des valeurs uniques
     // On ne peut pas utiliser null car l'index unique ne permet qu'un seul null
     const hiddenEvents = await Event.find({ isHidden: true });
     for (const event of hiddenEvents) {
       await Event.findByIdAndUpdate(event._id, {
-        eventNumber: `HIDDEN_${event._id}`, // Utiliser l'ID pour garantir l'unicité
+        eventNumber: `HIDDEN_${event._id}`, // Utiliser l'ID pour garantir l'unicitÃ©
       });
     }
-    console.log(`✅ ${hiddenEvents.length} événement(s) masqué(s) marqué(s)`);
+    logger.info(`âœ… ${hiddenEvents.length} Ã©vÃ©nement(s) masquÃ©(s) marquÃ©(s)`);
 
-    // Récupérer tous les événements NON masqués, triés par order puis par date de création
+    // RÃ©cupÃ©rer tous les Ã©vÃ©nements NON masquÃ©s, triÃ©s par order puis par date de crÃ©ation
     const visibleEvents = await Event.find({ isHidden: { $ne: true } })
       .sort({ order: 1, createdAt: -1 });
 
-    console.log(`📋 ${visibleEvents.length} événements visibles à renuméroter`);
+    logger.info(`ðŸ“‹ ${visibleEvents.length} Ã©vÃ©nements visibles Ã  renumÃ©roter`);
 
-    // ÉTAPE 1 : Mettre des numéros temporaires pour éviter les conflits
+    // Ã‰TAPE 1 : Mettre des numÃ©ros temporaires pour Ã©viter les conflits
     for (let i = 0; i < visibleEvents.length; i++) {
       await Event.findByIdAndUpdate(visibleEvents[i]._id, {
-        eventNumber: `TEMP_${i}_${Date.now()}`, // Timestamp pour garantir l'unicité
+        eventNumber: `TEMP_${i}_${Date.now()}`, // Timestamp pour garantir l'unicitÃ©
       });
     }
-    console.log("✅ Numéros temporaires appliqués");
+    logger.info("âœ… NumÃ©ros temporaires appliquÃ©s");
 
-    // ÉTAPE 2 : Mettre les vrais numéros (001, 002, 003...)
+    // Ã‰TAPE 2 : Mettre les vrais numÃ©ros (001, 002, 003...)
     for (let i = 0; i < visibleEvents.length; i++) {
       const newNumber = String(i + 1).padStart(3, "0");
       await Event.findByIdAndUpdate(visibleEvents[i]._id, {
         eventNumber: newNumber,
       });
     }
-    console.log("✅ Numéros définitifs appliqués");
+    logger.info("âœ… NumÃ©ros dÃ©finitifs appliquÃ©s");
 
-    console.log(`✅ Renumérotation terminée : ${visibleEvents.length} événements visibles`);
+    logger.info(`âœ… RenumÃ©rotation terminÃ©e : ${visibleEvents.length} Ã©vÃ©nements visibles`);
   } catch (error) {
-    console.error("❌ Erreur lors de la renumérotation:", error);
+    logger.error({ err: error }, "Erreur lors de la renumerotation");
     throw error;
   }
 }
@@ -62,20 +63,20 @@ async function renumberVisibleEvents() {
 // Routes publiques
 router.get("/", async (req: Request, res: Response) => {
   try {
-    // Si c'est une requête admin (via query param), retourner TOUS les événements
-    // Sinon, filtrer les événements masqués
+    // Si c'est une requÃªte admin (via query param), retourner TOUS les Ã©vÃ©nements
+    // Sinon, filtrer les Ã©vÃ©nements masquÃ©s
     const includeHidden = req.query.includeHidden === "true";
     const filter = includeHidden ? {} : { isHidden: { $ne: true } };
     
     const events = await Event.find(filter).sort({ order: 1, createdAt: -1 });
     res.json(events);
   } catch (error) {
-    console.error("Error fetching events");
+    logger.error("Error fetching events");
     res.status(500).json({ message: "Error fetching events" });
   }
 });
 
-// Validation d'URL ajoutée
+// Validation d'URL ajoutÃ©e
 router.get("/:id", validateUrlId, async (req: Request, res: Response) => {
   try {
     const event = await Event.findById(req.params.id);
@@ -84,12 +85,12 @@ router.get("/:id", validateUrlId, async (req: Request, res: Response) => {
     }
     res.json(event);
   } catch (error) {
-    console.error("Error fetching event");
+    logger.error("Error fetching event");
     res.status(500).json({ message: "Error fetching event" });
   }
 });
 
-// Routes protégées
+// Routes protÃ©gÃ©es
 router.post(
   "/",
   authMiddleware,
@@ -99,12 +100,12 @@ router.post(
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: "Fichier trop volumineux",
-            details: "La taille maximale autorisée est de 3MB",
+            details: "La taille maximale autorisÃ©e est de 3MB",
           });
         }
-        if (err.message.includes("Type de fichier non autorisé")) {
+        if (err.message.includes("Type de fichier non autorisÃ©")) {
           return res.status(400).json({
-            message: "Type de fichier non autorisé",
+            message: "Type de fichier non autorisÃ©",
             details: err.message,
           });
         }
@@ -122,7 +123,7 @@ router.post(
       if (!req.file) {
         return res.status(400).json({
           message: "Image requise",
-          details: "Aucun fichier n'a été uploadé",
+          details: "Aucun fichier n'a Ã©tÃ© uploadÃ©",
         });
       }
 
@@ -136,7 +137,7 @@ router.post(
       await newEvent.save();
       res.status(201).json(newEvent);
     } catch (error) {
-      console.error("Error creating event:", error);
+      logger.error({ err: error }, "Error creating event");
       res.status(400).json({
         message: "Error creating event",
         error: error instanceof Error ? error.message : "Unknown error",
@@ -145,7 +146,7 @@ router.post(
   }
 );
 
-// Route pour mettre à jour l'ordre des événements (AVANT /:id pour éviter les conflits)
+// Route pour mettre Ã  jour l'ordre des Ã©vÃ©nements (AVANT /:id pour Ã©viter les conflits)
 router.put(
   "/update-order",
   authMiddleware,
@@ -159,21 +160,21 @@ router.put(
           .json({ message: "Invalid ordered IDs provided" });
       }
 
-      // ÉTAPE 1 : Mettre des eventNumber temporaires pour éviter les conflits de unique constraint
-      // On utilise des préfixes "TEMP_" pour éviter les doublons pendant la mise à jour
+      // Ã‰TAPE 1 : Mettre des eventNumber temporaires pour Ã©viter les conflits de unique constraint
+      // On utilise des prÃ©fixes "TEMP_" pour Ã©viter les doublons pendant la mise Ã  jour
       for (let i = 0; i < orderedIds.length; i++) {
         await Event.findByIdAndUpdate(
           orderedIds[i],
           { 
             order: i,
-            eventNumber: `TEMP_${i}_${Date.now()}`  // Timestamp pour garantir l'unicité
+            eventNumber: `TEMP_${i}_${Date.now()}`  // Timestamp pour garantir l'unicitÃ©
           }
         );
       }
 
-      // ÉTAPE 2 : Renuméroter avec les vrais numéros (ordre inversé)
-      // Le premier visuel (en haut) = dernier numéro, le dernier visuel (en bas) = #001
-      // Car on affiche les événements récents en premier
+      // Ã‰TAPE 2 : RenumÃ©roter avec les vrais numÃ©ros (ordre inversÃ©)
+      // Le premier visuel (en haut) = dernier numÃ©ro, le dernier visuel (en bas) = #001
+      // Car on affiche les Ã©vÃ©nements rÃ©cents en premier
       for (let i = 0; i < orderedIds.length; i++) {
         const paddedNumber = String(orderedIds.length - i).padStart(3, "0");
         await Event.findByIdAndUpdate(
@@ -186,13 +187,13 @@ router.put(
 
       res.json({ message: "Event order updated successfully" });
     } catch (error) {
-      console.error("Error updating event order:", error);
+      logger.error({ err: error }, "Error updating event order");
       res.status(500).json({ message: "Error updating event order" });
     }
   }
 );
 
-// Mise à jour avec validation d'URL
+// Mise Ã  jour avec validation d'URL
 router.put(
   "/:id",
   validateUrlId,
@@ -203,12 +204,12 @@ router.put(
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: "Fichier trop volumineux",
-            details: "La taille maximale autorisée est de 3MB",
+            details: "La taille maximale autorisÃ©e est de 3MB",
           });
         }
-        if (err.message.includes("Type de fichier non autorisé")) {
+        if (err.message.includes("Type de fichier non autorisÃ©")) {
           return res.status(400).json({
-            message: "Type de fichier non autorisé",
+            message: "Type de fichier non autorisÃ©",
             details: err.message,
           });
         }
@@ -228,7 +229,7 @@ router.put(
         return res.status(404).json({ message: "Event not found" });
       }
 
-      // Si une nouvelle image est uploadée
+      // Si une nouvelle image est uploadÃ©e
       if (req.file) {
         // Supprimer l'ancienne image si elle existe
         if (event.imagePublicId) {
@@ -238,22 +239,22 @@ router.put(
         event.imagePublicId = (req.file as any).filename;
       }
 
-      // Mettre à jour les autres champs
+      // Mettre Ã  jour les autres champs
       Object.assign(event, req.body);
 
       await event.save();
       res.json(event);
     } catch (error) {
-      console.error("Error updating event");
+      logger.error("Error updating event");
       res.status(400).json({
         message: "Error updating event",
-        error: "Erreur de mise à jour",
+        error: "Erreur de mise Ã  jour",
       });
     }
   }
 );
 
-// Suppression avec validation d'URL et logs nettoyés
+// Suppression avec validation d'URL et logs nettoyÃ©s
 router.delete(
   "/:id",
   validateUrlId,
@@ -271,12 +272,12 @@ router.delete(
 
       await Event.findByIdAndDelete(req.params.id);
       
-      // Renuméroter tous les événements visibles après suppression
+      // RenumÃ©roter tous les Ã©vÃ©nements visibles aprÃ¨s suppression
       await renumberVisibleEvents();
       
       res.json({ message: "Event deleted successfully" });
     } catch (error) {
-      console.error("Error deleting event");
+      logger.error("Error deleting event");
       res.status(500).json({
         message: "Error deleting event",
       });
@@ -284,7 +285,7 @@ router.delete(
   }
 );
 
-// Masquer un événement
+// Masquer un Ã©vÃ©nement
 router.patch(
   "/:id/hide",
   validateUrlId,
@@ -300,18 +301,18 @@ router.patch(
         return res.status(404).json({ message: "Event not found" });
       }
       
-      // Renuméroter tous les événements visibles
+      // RenumÃ©roter tous les Ã©vÃ©nements visibles
       await renumberVisibleEvents();
       
       res.json(event);
     } catch (error) {
-      console.error("Error hiding event");
+      logger.error("Error hiding event");
       res.status(500).json({ message: "Error hiding event" });
     }
   }
 );
 
-// Démasquer un événement
+// DÃ©masquer un Ã©vÃ©nement
 router.patch(
   "/:id/unhide",
   validateUrlId,
@@ -327,18 +328,18 @@ router.patch(
         return res.status(404).json({ message: "Event not found" });
       }
       
-      // Renuméroter tous les événements visibles
+      // RenumÃ©roter tous les Ã©vÃ©nements visibles
       await renumberVisibleEvents();
       
       res.json(event);
     } catch (error) {
-      console.error("Error unhiding event");
+      logger.error("Error unhiding event");
       res.status(500).json({ message: "Error unhiding event" });
     }
   }
 );
 
-// Masquer plusieurs événements
+// Masquer plusieurs Ã©vÃ©nements
 router.post(
   "/hide-multiple",
   authMiddleware,
@@ -354,18 +355,18 @@ router.post(
         { isHidden: true }
       );
 
-      // Renuméroter tous les événements visibles
+      // RenumÃ©roter tous les Ã©vÃ©nements visibles
       await renumberVisibleEvents();
 
       res.json({ message: `${eventIds.length} event(s) hidden successfully` });
     } catch (error) {
-      console.error("Error hiding events");
+      logger.error("Error hiding events");
       res.status(500).json({ message: "Error hiding events" });
     }
   }
 );
 
-// Démasquer plusieurs événements
+// DÃ©masquer plusieurs Ã©vÃ©nements
 router.post(
   "/unhide-multiple",
   authMiddleware,
@@ -381,18 +382,18 @@ router.post(
         { isHidden: false }
       );
 
-      // Renuméroter tous les événements visibles
+      // RenumÃ©roter tous les Ã©vÃ©nements visibles
       await renumberVisibleEvents();
 
       res.json({ message: `${eventIds.length} event(s) unhidden successfully` });
     } catch (error) {
-      console.error("Error unhiding events");
+      logger.error("Error unhiding events");
       res.status(500).json({ message: "Error unhiding events" });
     }
   }
 );
 
-// Route utilitaire pour forcer la renumérotation (pour corriger manuellement si besoin)
+// Route utilitaire pour forcer la renumÃ©rotation (pour corriger manuellement si besoin)
 router.post(
   "/renumber-all",
   authMiddleware,
@@ -401,13 +402,13 @@ router.post(
       await renumberVisibleEvents();
       res.json({ message: "All visible events renumbered successfully" });
     } catch (error) {
-      console.error("Error renumbering events");
+      logger.error("Error renumbering events");
       res.status(500).json({ message: "Error renumbering events" });
     }
   }
 );
 
-// Marquer un événement comme phare
+// Marquer un Ã©vÃ©nement comme phare
 router.patch(
   "/:id/feature",
   validateUrlId,
@@ -424,13 +425,13 @@ router.patch(
       }
       res.json(event);
     } catch (error) {
-      console.error("Error featuring event");
+      logger.error("Error featuring event");
       res.status(500).json({ message: "Error featuring event" });
     }
   }
 );
 
-// Retirer le statut phare d'un événement
+// Retirer le statut phare d'un Ã©vÃ©nement
 router.patch(
   "/:id/unfeature",
   validateUrlId,
@@ -447,13 +448,13 @@ router.patch(
       }
       res.json(event);
     } catch (error) {
-      console.error("Error unfeaturing event");
+      logger.error("Error unfeaturing event");
       res.status(500).json({ message: "Error unfeaturing event" });
     }
   }
 );
 
-// Marquer plusieurs événements comme phares
+// Marquer plusieurs Ã©vÃ©nements comme phares
 router.post(
   "/feature-multiple",
   authMiddleware,
@@ -471,13 +472,13 @@ router.post(
 
       res.json({ message: `${eventIds.length} event(s) marked as featured successfully` });
     } catch (error) {
-      console.error("Error featuring events");
+      logger.error("Error featuring events");
       res.status(500).json({ message: "Error featuring events" });
     }
   }
 );
 
-// Retirer le statut phare de plusieurs événements
+// Retirer le statut phare de plusieurs Ã©vÃ©nements
 router.post(
   "/unfeature-multiple",
   authMiddleware,
@@ -495,10 +496,14 @@ router.post(
 
       res.json({ message: `${eventIds.length} event(s) unmarked as featured successfully` });
     } catch (error) {
-      console.error("Error unfeaturing events");
+      logger.error("Error unfeaturing events");
       res.status(500).json({ message: "Error unfeaturing events" });
     }
   }
 );
 
 export default router;
+
+
+
+

@@ -11,15 +11,16 @@ import authRoutes from "./routes/auth";
 import eventRoutes from "./routes/events";
 import galleryRoutes from "./routes/gallery";
 import shotgunSyncRoutes from "./routes/shotgun-sync";
+import { logger } from "./utils/logger";
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Trust proxy - IMPORTANT pour Render, Heroku, AWS, etc.
+// Trust proxy - IMPORTANT pour Railway, Render, Heroku, AWS, etc.
 // Permet à Express de lire correctement l'IP du client derrière un proxy inverse
-// 1 = Faire confiance UNIQUEMENT au premier proxy (Render)
+// 1 = Faire confiance UNIQUEMENT au premier proxy (Railway)
 // Cela empêche les attaquants de forger des headers X-Forwarded-For
-app.set('trust proxy', 1);
+app.set("trust proxy", 1);
 
 // Middlewares de sécurité
 app.use(
@@ -92,12 +93,65 @@ app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ limit: "5mb", extended: true }));
 
 // CORS sécurisé
+// Configuration flexible : utilise CORS_ORIGINS si défini, sinon valeurs par défaut
+// Format CORS_ORIGINS: "https://mercilille.com,https://app.railway.app,http://localhost:5173"
+const allowedOrigins = process.env.CORS_ORIGINS
+  ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
+  : ["https://mercilille.com", "http://localhost:5173"];
+
+// Validation des origines (sécurité supplémentaire)
+const isValidOrigin = (origin: string): boolean => {
+  try {
+    const url = new URL(origin);
+    // Autoriser uniquement HTTPS en production (sauf localhost)
+    if (process.env.NODE_ENV === "production" && url.protocol !== "https:" && !origin.includes("localhost")) {
+      return false;
+    }
+    return true;
+  } catch {
+    return false;
+  }
+};
+
+const validatedOrigins = allowedOrigins.filter(isValidOrigin);
+
+// Fallback vers les origines par défaut si aucune origine valide n'est trouvée
+const finalOrigins = validatedOrigins.length > 0 
+  ? validatedOrigins 
+  : ["https://mercilille.com", "http://localhost:5173"];
+
+if (validatedOrigins.length === 0 && process.env.CORS_ORIGINS) {
+  logger.warn(
+    { providedOrigins: allowedOrigins },
+    "No valid CORS origins found in CORS_ORIGINS, using defaults"
+  );
+}
+
+logger.info(
+  { origins: finalOrigins, count: finalOrigins.length },
+  "CORS origins configured"
+);
+
 app.use(
   cors({
-    origin: ["https://mercilille.com", "http://localhost:5173"],
+    origin: (origin, callback) => {
+      // Autoriser les requêtes sans origin (ex: Postman, curl)
+      if (!origin) {
+        return callback(null, true);
+      }
+
+      if (finalOrigins.includes(origin)) {
+        callback(null, true);
+      } else {
+        logger.warn({ origin, allowedOrigins: finalOrigins }, "CORS: Origin not allowed");
+        callback(new Error("Not allowed by CORS"));
+      }
+    },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
     allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    exposedHeaders: [],
+    maxAge: 86400, // 24 heures pour le preflight cache
   })
 );
 
@@ -147,12 +201,32 @@ app.use("/api/events", eventRoutes);
 app.use("/api/gallery", uploadLimiter, galleryRoutes);
 app.use("/api/shotgun-sync", shotgunSyncRoutes);
 
+app.use(
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+    logger.error(
+      {
+        err,
+        path: req.path,
+        method: req.method,
+      },
+      "Unhandled error"
+    );
+
+    if (res.headersSent) {
+      return next(err);
+    }
+
+    return res.status(500).json({ message: "Une erreur inattendue s'est produite" });
+  }
+);
+
 // Connect to database and start server
 connectDB().then(() => {
   // Initialiser le rate limiter APRÈS connexion MongoDB
   initRateLimiter();
   
   app.listen(PORT, () => {
-    console.log(`Server running on port ${PORT}`);
+    logger.info({ port: PORT }, "Server running");
   });
 });
