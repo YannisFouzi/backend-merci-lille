@@ -1,45 +1,63 @@
-﻿import express, { Request, Response } from "express";
+import crypto from "crypto";
+import express, { Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { authMiddleware, AuthRequest } from "../middleware/auth";
-import { loginRateLimiter, consumeLoginAttempt, resetLoginAttempts } from "../middleware/rateLimiter";
+import { consumeLoginAttempt, loginRateLimiter, resetLoginAttempts } from "../middleware/rateLimiter";
 import { validateLogin } from "../middleware/validation";
 import { Admin } from "../models/Admin";
 import { RefreshToken } from "../models/RefreshToken";
 import { logger } from "../utils/logger";
 
+const ACCESS_TOKEN_SECRET = process.env.JWT_SECRET as string;
+const REFRESH_TOKEN_SECRET = process.env.REFRESH_JWT_SECRET as string;
+const ACCESS_TOKEN_EXP_SECONDS = 15 * 60; // 15 minutes
+const REFRESH_TOKEN_EXP_DAYS = 7; // 7 days
+
+const hashToken = (token: string) =>
+  crypto.createHash("sha256").update(token).digest("hex");
+
+const buildCookieOptions = (maxAgeMs: number) => {
+  const isSecure = process.env.NODE_ENV === "production";
+  return {
+    httpOnly: true,
+    secure: isSecure,
+    sameSite: "strict" as const,
+    maxAge: maxAgeMs,
+  };
+};
+
 const router = express.Router();
 
-// Login route avec validation, rate limiting et refresh token
+// Login route avec validation, rate limiting et refresh token (hashé)
 router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res: Response) => {
   try {
     const { username, password } = req.body;
     const ip = req.ip || req.socket.remoteAddress || "unknown";
 
-    // Find admin
+    if (!ACCESS_TOKEN_SECRET || !REFRESH_TOKEN_SECRET) {
+      logger.error("Token secrets are not defined");
+      return res.status(500).json({ message: "Server error" });
+    }
+
     const admin = await Admin.findOne({ username });
     if (!admin) {
-      // Ã‰chec : consommer un point
       await consumeLoginAttempt(ip);
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // Check password
     const isMatch = await admin.comparePassword(password);
     if (!isMatch) {
-      // Ã‰chec : consommer un point
       await consumeLoginAttempt(ip);
       return res.status(401).json({ message: "Invalid credentials" });
     }
 
-    // RÃ©voquer les anciens refresh tokens de cet admin (nettoyage)
-    // On garde uniquement les 5 derniers actifs pour permettre multi-device
+    // Nettoyage des anciens refresh tokens (garder 5)
     const existingTokens = await RefreshToken.find({
       adminId: admin._id,
       isRevoked: false,
     }).sort({ createdAt: -1 });
 
     if (existingTokens.length >= 5) {
-      // RÃ©voquer les tokens au-delÃ  des 5 plus rÃ©cents
       const tokensToRevoke = existingTokens.slice(4);
       await RefreshToken.updateMany(
         { _id: { $in: tokensToRevoke.map((t) => t._id) } },
@@ -47,25 +65,23 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
       );
     }
 
-    // Generate tokens
     const accessToken = jwt.sign(
       { id: admin._id, type: "access" },
-      process.env.JWT_SECRET as string,
-      { expiresIn: "15m" } // Token court pour la sÃ©curitÃ©
+      ACCESS_TOKEN_SECRET,
+      { expiresIn: `${ACCESS_TOKEN_EXP_SECONDS}s` }
     );
 
     const refreshTokenString = jwt.sign(
       { id: admin._id, type: "refresh" },
-      process.env.JWT_SECRET as string,
-      { expiresIn: "7d" } // Refresh token plus long
+      REFRESH_TOKEN_SECRET,
+      { expiresIn: `${REFRESH_TOKEN_EXP_DAYS}d` }
     );
 
-    // Stocker le refresh token dans MongoDB avec informations de sÃ©curitÃ©
     const expiresAt = new Date();
-    expiresAt.setDate(expiresAt.getDate() + 7); // 7 jours
+    expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXP_DAYS);
 
     await RefreshToken.create({
-      token: refreshTokenString,
+      tokenHash: hashToken(refreshTokenString),
       adminId: admin._id,
       expiresAt,
       ipAddress: req.ip || req.socket.remoteAddress,
@@ -73,55 +89,39 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
       isRevoked: false,
     });
 
-    // SuccÃ¨s : rÃ©initialiser le compteur d'Ã©checs
     await resetLoginAttempts(ip);
 
-    // Configuration des cookies sÃ©curisÃ©s
-    // DÃ©tection automatique HTTPS : req.secure est true si la connexion est HTTPS
-    // (fonctionne correctement grÃ¢ce Ã  trust proxy configurÃ©)
-    const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
-    
-    // Cookie pour l'access token (15 minutes)
-    res.cookie("accessToken", accessToken, {
-      httpOnly: true, // Pas accessible en JavaScript (protection XSS)
-      secure: isSecure, // HTTPS uniquement (dÃ©tection automatique)
-      sameSite: "strict", // Protection CSRF
-      maxAge: 15 * 60 * 1000, // 15 minutes en ms
-    });
+    res.cookie("accessToken", accessToken, buildCookieOptions(ACCESS_TOKEN_EXP_SECONDS * 1000));
+    res.cookie("refreshToken", refreshTokenString, buildCookieOptions(REFRESH_TOKEN_EXP_DAYS * 24 * 60 * 60 * 1000));
 
-    // Cookie pour le refresh token (7 jours)
-    res.cookie("refreshToken", refreshTokenString, {
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 jours en ms
-    });
-
-    // Envoyer une rÃ©ponse de succÃ¨s (sans les tokens dans le body)
     res.json({
       message: "Login successful",
-      expiresIn: 900, // 15 minutes en secondes
+      expiresIn: ACCESS_TOKEN_EXP_SECONDS,
     });
   } catch (error) {
-    // Log sÃ©curisÃ© sans dÃ©tails sensibles
     logger.error({ err: error }, "Login attempt failed");
     res.status(500).json({ message: "Server error" });
   }
 });
 
-// Route pour rafraÃ®chir le token
+// Route pour rafraichir le token
 router.post("/refresh", async (req: Request, res: Response) => {
   try {
-    // Lire le refresh token depuis les cookies au lieu du body
+    if (!REFRESH_TOKEN_SECRET || !ACCESS_TOKEN_SECRET) {
+      logger.error("Token secrets are not defined");
+      return res.status(500).json({ message: "Server error" });
+    }
+
     const refreshToken = req.cookies.refreshToken;
 
     if (!refreshToken) {
       return res.status(401).json({ message: "Refresh token required" });
     }
 
-    // VÃ©rifier si le refresh token existe dans MongoDB et n'est pas rÃ©voquÃ©
+    const tokenHash = hashToken(refreshToken);
+
     const storedToken = await RefreshToken.findOne({
-      token: refreshToken,
+      tokenHash,
       isRevoked: false,
     });
 
@@ -129,16 +129,11 @@ router.post("/refresh", async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid refresh token" });
     }
 
-    // VÃ©rifier si le token a expirÃ© (double vÃ©rification, MongoDB TTL le supprimera aussi)
     if (storedToken.expiresAt < new Date()) {
       return res.status(401).json({ message: "Refresh token expired" });
     }
 
-    // VÃ©rifier la validitÃ© du JWT refresh token
-    const decoded = jwt.verify(
-      refreshToken,
-      process.env.JWT_SECRET as string
-    ) as {
+    const decoded = jwt.verify(refreshToken, REFRESH_TOKEN_SECRET) as {
       id: string;
       type: string;
     };
@@ -147,83 +142,56 @@ router.post("/refresh", async (req: Request, res: Response) => {
       return res.status(401).json({ message: "Invalid token type" });
     }
 
-    // Mettre Ã  jour la date de derniÃ¨re utilisation
     storedToken.lastUsedAt = new Date();
     await storedToken.save();
 
-    // GÃ©nÃ©rer un nouveau access token
     const newAccessToken = jwt.sign(
       { id: decoded.id, type: "access" },
-      process.env.JWT_SECRET as string,
-      { expiresIn: "15m" }
+      ACCESS_TOKEN_SECRET,
+      { expiresIn: `${ACCESS_TOKEN_EXP_SECONDS}s` }
     );
 
-    // Configuration des cookies sÃ©curisÃ©s
-    // DÃ©tection automatique HTTPS
-    const isSecure = req.secure || req.headers["x-forwarded-proto"] === "https";
-
-    // Envoyer le nouveau access token en cookie httpOnly
-    res.cookie("accessToken", newAccessToken, {
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: "strict",
-      maxAge: 15 * 60 * 1000, // 15 minutes en ms
-    });
+    res.cookie("accessToken", newAccessToken, buildCookieOptions(ACCESS_TOKEN_EXP_SECONDS * 1000));
 
     res.json({
       message: "Token refreshed successfully",
-      expiresIn: 900, // 15 minutes
+      expiresIn: ACCESS_TOKEN_EXP_SECONDS,
     });
   } catch (error) {
-    // Log sÃ©curisÃ© sans dÃ©tails sensibles
     logger.error({ err: error }, "Token refresh failed");
     return res.status(401).json({ message: "Invalid refresh token" });
   }
 });
 
-// Logout avec rÃ©vocation du refresh token
+// Logout avec révocation du refresh token
 router.post("/logout", async (req: Request, res: Response) => {
   try {
-    // Lire le refresh token depuis les cookies
     const refreshToken = req.cookies.refreshToken;
 
     if (refreshToken) {
-      // RÃ©voquer le refresh token dans MongoDB
       await RefreshToken.updateOne(
-        { token: refreshToken },
+        { tokenHash: hashToken(refreshToken) },
         { isRevoked: true }
       );
     }
 
-    // Effacer les cookies
     res.clearCookie("accessToken");
     res.clearCookie("refreshToken");
 
     res.json({ message: "Logged out successfully" });
   } catch (error) {
-    // Log sÃ©curisÃ© sans dÃ©tails sensibles
     logger.error({ err: error }, "Logout attempt failed");
     res.status(500).json({ message: "Server error" });
   }
 });
 
-// Verify token route - nouvelle route pour vÃ©rifier la validitÃ© du token
+// Verify token route - nouvelle route pour vérifier la validité du token
 router.get("/verify", authMiddleware, async (req: AuthRequest, res) => {
   try {
-    // Si on arrive ici, c'est que le token est valide (grÃ¢ce au middleware)
     res.json({ valid: true, admin: req.admin });
   } catch (error) {
     res.status(401).json({ valid: false, message: "Invalid token" });
   }
 });
 
-// Routes d'administration dangereuses supprimÃ©es pour la sÃ©curitÃ© :
-// - /setup : CrÃ©ation d'admin avec mot de passe en dur
-// - /check : Exposition de la liste des administrateurs
-// - /reset-password : Reset non sÃ©curisÃ© sans authentification
-//
-// L'administrateur dispose dÃ©jÃ  d'un compte sÃ©curisÃ© via setup-admin.js
-
 export default router;
-
-

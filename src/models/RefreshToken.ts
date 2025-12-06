@@ -2,7 +2,7 @@ import mongoose from "mongoose";
 
 // Interface pour le document RefreshToken
 interface IRefreshToken {
-  token: string;
+  tokenHash: string;
   adminId: mongoose.Types.ObjectId;
   expiresAt: Date;
   createdAt: Date;
@@ -18,7 +18,7 @@ interface RefreshTokenModel extends mongoose.Model<IRefreshToken> {
 }
 
 const refreshTokenSchema = new mongoose.Schema<IRefreshToken>({
-  token: {
+  tokenHash: {
     type: String,
     required: true,
     unique: true,

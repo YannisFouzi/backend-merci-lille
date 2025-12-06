@@ -38,7 +38,7 @@ class ShotgunSyncService {
       return new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
           {
-            folder: "merci-lille-events",
+            folder: "mercilille-events",
             resource_type: "image",
           },
           (error: any, result: any) => {

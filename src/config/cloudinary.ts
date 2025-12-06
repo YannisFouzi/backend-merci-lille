@@ -34,7 +34,7 @@ const storage = new CloudinaryStorage({
       folder: "mercilille-events",
       public_id: uniqueFileName,
       allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
-      resource_type: "raw",
+      resource_type: "image",
       transformation: [
         {
           width: 1000,
@@ -57,7 +57,7 @@ const galleryStorage = new CloudinaryStorage({
       folder: "mercilille-gallery",
       public_id: uniqueFileName,
       allowed_formats: ["jpg", "jpeg", "png", "gif", "webp"],
-      resource_type: "auto",
+      resource_type: "image",
       transformation: [
         {
           width: 1000,

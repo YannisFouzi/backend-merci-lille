@@ -1,4 +1,4 @@
-import "dotenv/config"; // ⚠️ IMPORTANT : Charger les variables d'environnement en PREMIER
+﻿import "dotenv/config"; // âš ï¸ IMPORTANT : Charger les variables d'environnement en PREMIER
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
@@ -17,12 +17,12 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 // Trust proxy - IMPORTANT pour Railway, Render, Heroku, AWS, etc.
-// Permet à Express de lire correctement l'IP du client derrière un proxy inverse
+// Permet Ã  Express de lire correctement l'IP du client derriÃ¨re un proxy inverse
 // 1 = Faire confiance UNIQUEMENT au premier proxy (Railway)
-// Cela empêche les attaquants de forger des headers X-Forwarded-For
+// Cela empÃªche les attaquants de forger des headers X-Forwarded-For
 app.set("trust proxy", 1);
 
-// Middlewares de sécurité
+// Middlewares de sÃ©curitÃ©
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -45,16 +45,16 @@ app.use(
 // Protection contre les injections NoSQL
 app.use(
   mongoSanitize({
-    replaceWith: "_", // Remplace les caractères dangereux par _
+    replaceWith: "_", // Remplace les caractÃ¨res dangereux par _
   })
 );
 
-// Rate limiting général
+// Rate limiting gÃ©nÃ©ral
 const generalLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100, // Max 100 requêtes par IP
+  max: 100, // Max 100 requÃªtes par IP
   message: {
-    error: "Trop de requêtes, veuillez réessayer plus tard.",
+    error: "Trop de requÃªtes, veuillez rÃ©essayer plus tard.",
   },
   standardHeaders: true,
   legacyHeaders: false,
@@ -66,13 +66,13 @@ const authLimiter = rateLimit({
   max: 5, // Max 5 tentatives de connexion par IP
   message: {
     error:
-      "Trop de tentatives de connexion, veuillez réessayer dans 15 minutes.",
+      "Trop de tentatives de connexion, veuillez rÃ©essayer dans 15 minutes.",
   },
   standardHeaders: true,
   legacyHeaders: false,
 });
 
-// Rate limiting pour les uploads (très strict)
+// Rate limiting pour les uploads (trÃ¨s strict)
 const uploadLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
   max: 10, // Max 10 uploads par minute
@@ -85,21 +85,21 @@ const uploadLimiter = rateLimit({
 
 app.use(generalLimiter);
 
-// Cookie parser pour les cookies httpOnly (sécurité)
+// Cookie parser pour les cookies httpOnly (sÃ©curitÃ©)
 app.use(cookieParser());
 
-// Limite de taille raisonnable pour les requêtes (sécurité)
+// Limite de taille raisonnable pour les requÃªtes (sÃ©curitÃ©)
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ limit: "5mb", extended: true }));
 
-// CORS sécurisé
-// Configuration flexible : utilise CORS_ORIGINS si défini, sinon valeurs par défaut
+// CORS sÃ©curisÃ©
+// Configuration flexible : utilise CORS_ORIGINS si dÃ©fini, sinon valeurs par dÃ©faut
 // Format CORS_ORIGINS: "https://mercilille.com,https://app.railway.app,http://localhost:5173"
 const allowedOrigins = process.env.CORS_ORIGINS
   ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
   : ["https://mercilille.com", "http://localhost:5173"];
 
-// Validation des origines (sécurité supplémentaire)
+// Validation des origines (sÃ©curitÃ© supplÃ©mentaire)
 const isValidOrigin = (origin: string): boolean => {
   try {
     const url = new URL(origin);
@@ -115,7 +115,7 @@ const isValidOrigin = (origin: string): boolean => {
 
 const validatedOrigins = allowedOrigins.filter(isValidOrigin);
 
-// Fallback vers les origines par défaut si aucune origine valide n'est trouvée
+// Fallback vers les origines par dÃ©faut si aucune origine valide n'est trouvÃ©e
 const finalOrigins = validatedOrigins.length > 0 
   ? validatedOrigins 
   : ["https://mercilille.com", "http://localhost:5173"];
@@ -135,7 +135,7 @@ logger.info(
 app.use(
   cors({
     origin: (origin, callback) => {
-      // Autoriser les requêtes sans origin (ex: Postman, curl)
+      // Autoriser les requÃªtes sans origin (ex: Postman, curl)
       if (!origin) {
         return callback(null, true);
       }
@@ -155,36 +155,35 @@ app.use(
   })
 );
 
-// Protection CSRF basique pour les requêtes non-GET
+// Protection Origin/Referer pour les requêtes non-GET sur routes protégées
 app.use((req, res, next) => {
-  // Ignorer CSRF pour les requêtes GET et les routes publiques
-  if (
-    req.method === "GET" ||
-    (req.path.startsWith("/api/events") && req.method === "GET")
-  ) {
+  if (req.method === "GET") {
     return next();
   }
 
-  // Appliquer CSRF seulement aux routes backend protégées
-  const protectedRoutes = ["/api/auth", "/api/events", "/api/gallery"];
-  const isProtectedRoute = protectedRoutes.some((route) =>
-    req.path.startsWith(route)
-  );
+  const protectedRoutes = ["/api/auth", "/api/events", "/api/gallery", "/api/shotgun-sync"];
+  const isProtectedRoute = protectedRoutes.some((route) => req.path.startsWith(route));
 
-  if (isProtectedRoute) {
-    // Vérifier la présence d'un header custom pour les requêtes AJAX
-    const customHeader = req.headers["x-requested-with"];
-    if (!customHeader) {
-      return res.status(403).json({
-        message: "Requête non autorisée - Header de sécurité manquant",
-      });
-    }
+  if (!isProtectedRoute) {
+    return next();
   }
 
-  next();
-});
+  const origin = req.headers.origin || "";
+  const referer = req.headers.referer || "";
 
-// Route de santé pour le ping (sans rate limiting)
+  const isAllowed =
+    (origin && finalOrigins.includes(origin)) ||
+    (referer && finalOrigins.some((o) => referer.toString().startsWith(o)));
+
+  if (!isAllowed) {
+    return res.status(403).json({
+      message: "Requête non autorisée - Origine invalide",
+    });
+  }
+
+  return next();
+});
+// Route de santÃ© pour le ping (sans rate limiting)
 app.get("/health", (req, res) => {
   res.status(200).json({
     status: "OK",
@@ -193,8 +192,8 @@ app.get("/health", (req, res) => {
   });
 });
 
-// Routes avec rate limiting spécifique
-// Note: Le rate limiting sur /api/auth/login est géré par loginRateLimiter (MongoDB)
+// Routes avec rate limiting spÃ©cifique
+// Note: Le rate limiting sur /api/auth/login est gÃ©rÃ© par loginRateLimiter (MongoDB)
 // dans auth.ts - pas besoin de limiter toutes les routes auth
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
@@ -223,10 +222,11 @@ app.use(
 
 // Connect to database and start server
 connectDB().then(() => {
-  // Initialiser le rate limiter APRÈS connexion MongoDB
+  // Initialiser le rate limiter APRÃˆS connexion MongoDB
   initRateLimiter();
   
   app.listen(PORT, () => {
     logger.info({ port: PORT }, "Server running");
   });
 });
+
