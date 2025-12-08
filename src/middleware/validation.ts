@@ -70,12 +70,14 @@ export const validateEvent = [
   body("price")
     .optional()
     .isFloat({ min: 0, max: 9999.99 })
-    .withMessage("Le prix doit être un nombre entre 0 et 9999.99"),
+    .withMessage("Le prix doit être un nombre entre 0 et 9999.99")
+    .toFloat(),
 
   body("isFree")
     .optional()
     .isBoolean()
-    .withMessage("isFree doit être un booléen"),
+    .withMessage("isFree doit être un booléen")
+    .toBoolean(),
 
   body("ticketLink")
     .trim()
@@ -139,12 +141,14 @@ export const validateEventUpdate = [
   body("price")
     .optional()
     .isFloat({ min: 0, max: 9999.99 })
-    .withMessage("Le prix doit être un nombre entre 0 et 9999.99"),
+    .withMessage("Le prix doit être un nombre entre 0 et 9999.99")
+    .toFloat(),
 
   body("isFree")
     .optional()
     .isBoolean()
-    .withMessage("isFree doit être un booléen"),
+    .withMessage("isFree doit être un booléen")
+    .toBoolean(),
 
   body("ticketLink")
     .optional()

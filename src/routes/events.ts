@@ -127,8 +127,17 @@ router.post(
         });
       }
 
+      const isFree = req.body.isFree === "true" || req.body.isFree === true;
+      const priceValue = isFree
+        ? 0
+        : req.body.price
+        ? Number.parseFloat(req.body.price)
+        : 0;
+
       const eventData = {
         ...req.body,
+        isFree,
+        price: Number.isFinite(priceValue) ? priceValue : 0,
         imageSrc: req.file.path,
         imagePublicId: (req.file as any).filename,
       };
@@ -204,12 +213,12 @@ router.put(
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: "Fichier trop volumineux",
-            details: "La taille maximale autorisÃ©e est de 3MB",
+            details: "La taille maximale autoris?e est de 3MB",
           });
         }
-        if (err.message.includes("Type de fichier non autorisÃ©")) {
+        if (err.message.includes("Type de fichier non autorise")) {
           return res.status(400).json({
-            message: "Type de fichier non autorisÃ©",
+            message: "Type de fichier non autorise",
             details: err.message,
           });
         }
@@ -229,7 +238,7 @@ router.put(
         return res.status(404).json({ message: "Event not found" });
       }
 
-      // Si une nouvelle image est uploadÃ©e
+      // Si une nouvelle image est uploadee
       if (req.file) {
         // Supprimer l'ancienne image si elle existe
         if (event.imagePublicId) {
@@ -239,8 +248,25 @@ router.put(
         event.imagePublicId = (req.file as any).filename;
       }
 
-      // Mettre Ã  jour les autres champs
-      Object.assign(event, req.body);
+      const isFree =
+        req.body.isFree === "true" ||
+        req.body.isFree === true ||
+        req.body.isFree === "on";
+
+      const priceValue = isFree
+        ? 0
+        : req.body.price !== undefined
+        ? Number.parseFloat(req.body.price)
+        : event.price ?? 0;
+
+      const updatedFields = {
+        ...req.body,
+        isFree,
+        price: Number.isFinite(priceValue) ? priceValue : 0,
+      };
+
+      // Mettre a jour les autres champs
+      Object.assign(event, updatedFields);
 
       await event.save();
       res.json(event);
@@ -248,7 +274,7 @@ router.put(
       logger.error("Error updating event");
       res.status(400).json({
         message: "Error updating event",
-        error: "Erreur de mise Ã  jour",
+        error: "Erreur de mise a jour",
       });
     }
   }
