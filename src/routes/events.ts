@@ -11,53 +11,71 @@ import { logger } from "../utils/logger";
 
 const router = express.Router();
 
+let renumberLock: Promise<void> = Promise.resolve();
+
+async function withRenumberLock<T>(fn: () => Promise<T>): Promise<T> {
+  const start = renumberLock.catch(() => undefined);
+  let release: () => void;
+  renumberLock = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  await start;
+  try {
+    return await fn();
+  } finally {
+    release!();
+  }
+}
+
 /**
  * Fonction utilitaire pour renumÃ©roter tous les Ã©vÃ©nements NON masquÃ©s
  * Les Ã©vÃ©nements masquÃ©s auront un eventNumber null
  * Utilise une stratÃ©gie en 3 temps pour Ã©viter les conflits de clÃ©s uniques
  */
 async function renumberVisibleEvents() {
-  try {
-    logger.info("ðŸ”„ DÃ©but de la renumÃ©rotation...");
-    
-    // Ã‰TAPE 0 : IMPORTANT - Mettre les Ã©vÃ©nements masquÃ©s Ã  des valeurs uniques
-    // On ne peut pas utiliser null car l'index unique ne permet qu'un seul null
-    const hiddenEvents = await Event.find({ isHidden: true });
-    for (const event of hiddenEvents) {
-      await Event.findByIdAndUpdate(event._id, {
-        eventNumber: `HIDDEN_${event._id}`, // Utiliser l'ID pour garantir l'unicitÃ©
-      });
+  return withRenumberLock(async () => {
+    try {
+      logger.info("Renumerotation : debut...");
+
+      // ETAPE 0 : IMPORTANT - Mettre les evenements masques sur des valeurs uniques
+      // On ne peut pas utiliser null car l'index unique ne permet qu'un seul null
+      const hiddenEvents = await Event.find({ isHidden: true });
+      for (const event of hiddenEvents) {
+        await Event.findByIdAndUpdate(event._id, {
+          eventNumber: `HIDDEN_${event._id}`, // Utiliser l'ID pour garantir l'unicite
+        });
+      }
+      logger.info(`Renumerotation : ${hiddenEvents.length} evenement(s) masques marques`);
+
+      // Recuperer tous les evenements NON masques, tries par order puis par date de creation
+      const visibleEvents = await Event.find({ isHidden: { $ne: true } })
+        .sort({ order: 1, createdAt: -1 });
+
+      logger.info(`Renumerotation : ${visibleEvents.length} evenements visibles a traiter`);
+
+      // ETAPE 1 : Mettre des numeros temporaires pour eviter les conflits
+      for (let i = 0; i < visibleEvents.length; i++) {
+        await Event.findByIdAndUpdate(visibleEvents[i]._id, {
+          eventNumber: `TEMP_${i}_${Date.now()}`,
+        });
+      }
+      logger.info("Renumerotation : numeros temporaires appliques");
+
+      // ETAPE 2 : Mettre les vrais numeros (001, 002, 003...)
+      for (let i = 0; i < visibleEvents.length; i++) {
+        const newNumber = String(i + 1).padStart(3, "0");
+        await Event.findByIdAndUpdate(visibleEvents[i]._id, {
+          eventNumber: newNumber,
+        });
+      }
+      logger.info("Renumerotation : numeros definitifs appliques");
+
+      logger.info(`Renumerotation terminee : ${visibleEvents.length} evenements visibles`);
+    } catch (error) {
+      logger.error({ err: error }, "Erreur lors de la renumerotation");
+      throw error;
     }
-    logger.info(`âœ… ${hiddenEvents.length} Ã©vÃ©nement(s) masquÃ©(s) marquÃ©(s)`);
-
-    // RÃ©cupÃ©rer tous les Ã©vÃ©nements NON masquÃ©s, triÃ©s par order puis par date de crÃ©ation
-    const visibleEvents = await Event.find({ isHidden: { $ne: true } })
-      .sort({ order: 1, createdAt: -1 });
-
-    logger.info(`ðŸ“‹ ${visibleEvents.length} Ã©vÃ©nements visibles Ã  renumÃ©roter`);
-
-    // Ã‰TAPE 1 : Mettre des numÃ©ros temporaires pour Ã©viter les conflits
-    for (let i = 0; i < visibleEvents.length; i++) {
-      await Event.findByIdAndUpdate(visibleEvents[i]._id, {
-        eventNumber: `TEMP_${i}_${Date.now()}`, // Timestamp pour garantir l'unicitÃ©
-      });
-    }
-    logger.info("âœ… NumÃ©ros temporaires appliquÃ©s");
-
-    // Ã‰TAPE 2 : Mettre les vrais numÃ©ros (001, 002, 003...)
-    for (let i = 0; i < visibleEvents.length; i++) {
-      const newNumber = String(i + 1).padStart(3, "0");
-      await Event.findByIdAndUpdate(visibleEvents[i]._id, {
-        eventNumber: newNumber,
-      });
-    }
-    logger.info("âœ… NumÃ©ros dÃ©finitifs appliquÃ©s");
-
-    logger.info(`âœ… RenumÃ©rotation terminÃ©e : ${visibleEvents.length} Ã©vÃ©nements visibles`);
-  } catch (error) {
-    logger.error({ err: error }, "Erreur lors de la renumerotation");
-    throw error;
-  }
+  });
 }
 
 // Routes publiques
@@ -161,38 +179,40 @@ router.put(
   authMiddleware,
   async (req: Request, res: Response) => {
     try {
-      const { orderedIds } = req.body;
+      await withRenumberLock(async () => {
+        const { orderedIds } = req.body;
 
-      if (!orderedIds || !Array.isArray(orderedIds)) {
-        return res
-          .status(400)
-          .json({ message: "Invalid ordered IDs provided" });
-      }
+        if (!orderedIds || !Array.isArray(orderedIds)) {
+          return res
+            .status(400)
+            .json({ message: "Invalid ordered IDs provided" });
+        }
 
-      // Ã‰TAPE 1 : Mettre des eventNumber temporaires pour Ã©viter les conflits de unique constraint
-      // On utilise des prÃ©fixes "TEMP_" pour Ã©viter les doublons pendant la mise Ã  jour
-      for (let i = 0; i < orderedIds.length; i++) {
-        await Event.findByIdAndUpdate(
-          orderedIds[i],
-          { 
-            order: i,
-            eventNumber: `TEMP_${i}_${Date.now()}`  // Timestamp pour garantir l'unicitÃ©
-          }
-        );
-      }
+        // ETAPE 1 : Mettre des eventNumber temporaires pour eviter les conflits de unique constraint
+        // On utilise des prefix es "TEMP_" pour eviter les doublons pendant la mise a jour
+        for (let i = 0; i < orderedIds.length; i++) {
+          await Event.findByIdAndUpdate(
+            orderedIds[i],
+            {
+              order: i,
+              eventNumber: `TEMP_${i}_${Date.now()}`,
+            }
+          );
+        }
 
-      // Ã‰TAPE 2 : RenumÃ©roter avec les vrais numÃ©ros (ordre inversÃ©)
-      // Le premier visuel (en haut) = dernier numÃ©ro, le dernier visuel (en bas) = #001
-      // Car on affiche les Ã©vÃ©nements rÃ©cents en premier
-      for (let i = 0; i < orderedIds.length; i++) {
-        const paddedNumber = String(orderedIds.length - i).padStart(3, "0");
-        await Event.findByIdAndUpdate(
-          orderedIds[i],
-          { 
-            eventNumber: paddedNumber
-          }
-        );
-      }
+        // ETAPE 2 : Renumeroter avec les vrais numeros (ordre inverse)
+        // Le premier visuel (en haut) = dernier numero, le dernier visuel (en bas) = #001
+        // Car on affiche les evenements recents en premier
+        for (let i = 0; i < orderedIds.length; i++) {
+          const paddedNumber = String(orderedIds.length - i).padStart(3, "0");
+          await Event.findByIdAndUpdate(
+            orderedIds[i],
+            {
+              eventNumber: paddedNumber,
+            }
+          );
+        }
+      });
 
       res.json({ message: "Event order updated successfully" });
     } catch (error) {
