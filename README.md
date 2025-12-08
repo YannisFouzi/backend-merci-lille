@@ -1,4 +1,4 @@
-# 🎉 Merci Lille - Backend API
+﻿# 🎉 Merci Lille - Backend API
 
 ![Node.js](https://img.shields.io/badge/Node.js-20+-green?logo=node.js)
 ![TypeScript](https://img.shields.io/badge/TypeScript-5.2-blue?logo=typescript)
@@ -331,8 +331,6 @@ Récupérer tous les événements (publics uniquement)
     "country": "France",
     "date": "2024-12-31T20:00:00.000Z",
     "time": "20h00",
-    "isFree": false,
-    "price": "10€",
     "genres": ["Techno", "House"],
     "ticketLink": "https://shotgun.live/...",
     "isPast": false,
@@ -372,8 +370,6 @@ city: "Lille"
 country: "France"
 date: "2024-12-31"
 time: "20h00"
-isFree: false
-price: "10€"
 genres: ["Techno", "House"]  // JSON string
 ticketLink: "https://shotgun.live/..."
 image: [File]  // Image (max 3MB)
@@ -384,7 +380,6 @@ image: [File]  // Image (max 3MB)
 - `city`: requis, 2-100 caractères
 - `date`: requis, format date valide
 - `time`: requis
-- `price`: requis si `isFree=false`
 - `ticketLink`: requis, URL valide
 - `image`: requis, types autorisés: jpg, jpeg, png, gif, webp
 
@@ -765,8 +760,6 @@ Administrateurs du système
   country: String,
   date: Date (required),
   time: String (required),
-  isFree: Boolean,
-  price: String,
   genres: [String],
   ticketLink: String (required),
   isPast: Boolean,

@@ -144,13 +144,8 @@ router.post(
         });
       }
 
-      const isFree = req.body.isFree === "true" || req.body.isFree === true;
-      const priceValue = isFree ? 0 : req.body.price ? Number.parseFloat(req.body.price) : 0;
-
       const eventData = {
         ...req.body,
-        isFree,
-        price: Number.isFinite(priceValue) ? priceValue : 0,
         imageSrc: req.file.path,
         imagePublicId: (req.file as any).filename,
       };
@@ -251,23 +246,8 @@ router.put(
         event.imagePublicId = (req.file as any).filename;
       }
 
-      const isFree =
-        req.body.isFree === "true" || req.body.isFree === true || req.body.isFree === "on";
-
-      const priceValue = isFree
-        ? 0
-        : req.body.price !== undefined
-          ? Number.parseFloat(req.body.price)
-          : (event.price ?? 0);
-
-      const updatedFields = {
-        ...req.body,
-        isFree,
-        price: Number.isFinite(priceValue) ? priceValue : 0,
-      };
-
-      // Mettre a jour les autres champs
-      Object.assign(event, updatedFields);
+      // Mettre a jour les autres champs (hors image deja traitee)
+      Object.assign(event, req.body);
 
       await event.save();
       res.json(event);

@@ -37,18 +37,6 @@ const eventSchema = new mongoose.Schema({
     required: [true, "Time is required"],
     trim: true,
   },
-  isFree: {
-    type: Boolean,
-    default: false,
-  },
-  price: {
-    type: Number,
-    default: 0,
-    required: function (this: any) {
-      return !this.isFree;
-    },
-    min: 0,
-  },
   genres: {
     type: [String],
     default: [],

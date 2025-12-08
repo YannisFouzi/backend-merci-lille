@@ -21,10 +21,6 @@ export interface ShotgunEvent {
     longitude?: number;
   };
   genres?: Array<{ name: string }>;
-  deals?: Array<{
-    name: string;
-    price: number;
-  }>;
   leftTicketsCount?: number;
   publishedAt?: string;
   cancelledAt?: string;

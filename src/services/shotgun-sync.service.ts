@@ -88,15 +88,6 @@ class ShotgunSyncService {
       }
     }
 
-    // DÃ©terminer si c'est gratuit ou payant
-    const minPrice =
-      shotgunEvent.deals && shotgunEvent.deals.length > 0
-        ? Math.min(...shotgunEvent.deals.map((d) => d.price))
-        : 0;
-
-    const isFree = minPrice === 0;
-    const price = isFree ? "0" : minPrice.toString();
-
     // DÃ©terminer si l'Ã©vÃ©nement est passÃ©
     const isPast = startDate < new Date();
 
@@ -109,8 +100,6 @@ class ShotgunSyncService {
       country: "", // Laisser vide pour afficher uniquement le venue
       date: startDate,
       time: time,
-      isFree: isFree,
-      price: price,
       genres: genres,
       ticketLink: shotgunEvent.url,
       isPast: isPast,
@@ -232,3 +221,6 @@ class ShotgunSyncService {
 
 export const shotgunSyncService = new ShotgunSyncService();
 export type { SyncResult };
+
+
+
