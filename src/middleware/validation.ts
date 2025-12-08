@@ -155,20 +155,28 @@ export const validateMongoId = (paramName: string = "id") => [
 export const validateImageIds = [
   body("imageIds")
     .isArray({ min: 1, max: 50 })
-    .withMessage("imageIds doit Ãªtre un tableau de 1 Ã  50 Ã©lÃ©ments"),
+    .withMessage("imageIds doit etre un tableau de 1 a 50 elements"),
 
-  body("imageIds.*").isMongoId().withMessage("Chaque ID d'image doit Ãªtre un ID MongoDB valide"),
+  body("imageIds.*").isMongoId().withMessage("Chaque ID d'image doit etre un ID MongoDB valide"),
+
+  body("imageIds")
+    .custom((ids) => Array.isArray(ids) && new Set(ids).size === ids.length)
+    .withMessage("imageIds ne doit pas contenir de doublons"),
 
   handleValidationErrors,
 ];
 
-// Validation pour la mise Ã  jour de l'ordre des images
+// Validation pour la mise a jour de l'ordre des images
 export const validateImageOrder = [
   body("orderedIds")
     .isArray({ min: 1, max: 100 })
-    .withMessage("orderedIds doit Ãªtre un tableau de 1 Ã  100 Ã©lÃ©ments"),
+    .withMessage("orderedIds doit etre un tableau de 1 a 100 elements"),
 
-  body("orderedIds.*").isMongoId().withMessage("Chaque ID doit Ãªtre un ID MongoDB valide"),
+  body("orderedIds.*").isMongoId().withMessage("Chaque ID doit etre un ID MongoDB valide"),
+
+  body("orderedIds")
+    .custom((ids) => Array.isArray(ids) && new Set(ids).size === ids.length)
+    .withMessage("orderedIds ne doit pas contenir de doublons"),
 
   handleValidationErrors,
 ];

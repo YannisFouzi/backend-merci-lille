@@ -1,4 +1,4 @@
-﻿import express, { NextFunction, Request, Response } from "express";
+import express, { NextFunction, Request, Response } from "express";
 import { deleteImage, uploadGallery } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
 import { validateImageIds, validateImageOrder, validateUrlId } from "../middleware/validation";
@@ -8,7 +8,7 @@ import { logger } from "../utils/logger";
 const router = express.Router();
 
 // Routes publiques
-router.get("/", async (req, res) => {
+router.get("/", async (_req, res) => {
   try {
     const images = await Gallery.find().sort({ order: 1, createdAt: -1 });
     res.json(images);
@@ -18,7 +18,7 @@ router.get("/", async (req, res) => {
   }
 });
 
-// Routes protÃ©gÃ©es
+// Routes protégées
 router.post(
   "/",
   authMiddleware,
@@ -28,18 +28,18 @@ router.post(
         if (err.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: "Fichier trop volumineux",
-            details: "La taille maximale autorisÃ©e est de 5MB par image",
+            details: "La taille maximale autorisée est de 5MB par image",
           });
         }
         if (err.code === "LIMIT_FILE_COUNT") {
           return res.status(400).json({
             message: "Trop de fichiers",
-            details: "Maximum 10 images autorisÃ©es par upload",
+            details: "Maximum 10 images autorisées par upload",
           });
         }
-        if (err.message.includes("Type de fichier non autorisÃ©")) {
+        if (err.message.includes("Type de fichier non autorisé")) {
           return res.status(400).json({
-            message: "Type de fichier non autorisÃ©",
+            message: "Type de fichier non autorisé",
             details: err.message,
           });
         }
@@ -53,31 +53,30 @@ router.post(
   },
   async (req, res) => {
     try {
-      // Log sÃ©curisÃ© pour debug sans exposer le contenu des fichiers
       logger.info(`Upload request: ${req.files?.length || 0} files received`);
 
       if (!req.files || !Array.isArray(req.files) || req.files.length === 0) {
         return res.status(400).json({
           message: "Images requises",
-          details: "Aucun fichier n'a Ã©tÃ© uploadÃ©",
+          details: "Aucun fichier n'a été uploadé",
         });
       }
 
       const uploadedFiles = req.files;
       const savedImages = [];
 
-      // DÃ©caler tous les ordres existants pour faire de la place au dÃ©but
+      // Décaler tous les ordres existants pour faire de la place au début
       const existingImagesCount = await Gallery.countDocuments();
       if (existingImagesCount > 0) {
         await Gallery.updateMany({}, { $inc: { order: uploadedFiles.length } });
       }
 
-      // Ajouter les nouvelles images au dÃ©but (ordre 0, 1, 2...)
+      // Ajouter les nouvelles images au début (ordre 0, 1, 2...)
       for (let i = 0; i < uploadedFiles.length; i++) {
         const file = uploadedFiles[i];
         const newImage = new Gallery({
           imageSrc: file.path,
-          imagePublicId: file.filename || `gallery_${Date.now()}_${i}`,
+          imagePublicId: (file as any).filename || `gallery_${Date.now()}_${i}`,
           order: i,
         });
         await newImage.save();
@@ -107,8 +106,10 @@ router.post(
         return res.status(400).json({ message: "Invalid image IDs provided" });
       }
 
+      const uniqueIds = Array.from(new Set(imageIds));
+
       const results = [];
-      for (const id of imageIds) {
+      for (const id of uniqueIds) {
         const image = await Gallery.findById(id);
         if (image) {
           await deleteImage(image.imagePublicId);
@@ -127,7 +128,7 @@ router.post(
   }
 );
 
-// Route pour mise Ã  jour de l'ordre avec validation
+// Route pour mise à jour de l'ordre avec validation
 router.put(
   "/update-order",
   authMiddleware,
@@ -140,12 +141,38 @@ router.put(
         return res.status(400).json({ message: "Invalid ordered IDs provided" });
       }
 
-      // Mettre Ã  jour l'ordre de chaque image
-      const updatePromises = orderedIds.map((id, index) =>
-        Gallery.findByIdAndUpdate(id, { order: index }, { new: true })
-      );
+      const existing = await Gallery.find().select("_id").lean();
+      const existingIds = new Set(existing.map((img) => img._id.toString()));
 
-      await Promise.all(updatePromises);
+      if (orderedIds.length !== existing.length) {
+        return res.status(400).json({
+          message: "Invalid ordered IDs provided",
+          details: "Le nombre d'IDs ne correspond pas aux images existantes",
+        });
+      }
+
+      const invalidIds = orderedIds.filter((id: string) => !existingIds.has(id));
+      if (invalidIds.length > 0) {
+        return res.status(400).json({
+          message: "Invalid ordered IDs provided",
+          details: `IDs inconnus: ${invalidIds.join(", ")}`,
+        });
+      }
+
+      const session = await Gallery.startSession();
+      session.startTransaction();
+      try {
+        const updatePromises = orderedIds.map((id: string, index: number) =>
+          Gallery.findByIdAndUpdate(id, { order: index }, { session })
+        );
+        await Promise.all(updatePromises);
+        await session.commitTransaction();
+      } catch (error) {
+        await session.abortTransaction();
+        throw error;
+      } finally {
+        session.endSession();
+      }
 
       res.json({ message: "Image order updated successfully" });
     } catch (error) {
@@ -156,21 +183,26 @@ router.put(
 );
 
 // Route pour suppression unique avec validation d'URL
-router.delete("/:id", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
-  try {
-    const image = await Gallery.findById(req.params.id);
-    if (!image) {
-      return res.status(404).json({ message: "Image not found" });
+router.delete(
+  "/:id",
+  validateUrlId,
+  authMiddleware,
+  async (req: Request, res: Response) => {
+    try {
+      const image = await Gallery.findById(req.params.id);
+      if (!image) {
+        return res.status(404).json({ message: "Image not found" });
+      }
+
+      await deleteImage(image.imagePublicId);
+      await Gallery.findByIdAndDelete(req.params.id);
+
+      res.json({ message: "Image deleted successfully" });
+    } catch (error) {
+      logger.error("Error deleting gallery image");
+      res.status(500).json({ message: "Error deleting image" });
     }
-
-    await deleteImage(image.imagePublicId);
-    await Gallery.findByIdAndDelete(req.params.id);
-
-    res.json({ message: "Image deleted successfully" });
-  } catch (error) {
-    logger.error("Error deleting gallery image");
-    res.status(500).json({ message: "Error deleting image" });
   }
-});
+);
 
 export default router;
