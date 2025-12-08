@@ -1,4 +1,4 @@
-import "dotenv/config"; // IMPORTANT : Charger les variables d'environnement en PREMIER
+﻿import "dotenv/config"; // IMPORTANT : Charger les variables d'environnement en PREMIER
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
@@ -7,6 +7,7 @@ import rateLimit from "express-rate-limit";
 import helmet from "helmet";
 
 import { connectDB } from "./config/database";
+import { csrfProtection } from "./middleware/csrf";
 import { initRateLimiter } from "./middleware/rateLimiter";
 import authRoutes from "./routes/auth";
 import eventRoutes from "./routes/events";
@@ -81,6 +82,9 @@ app.use(cookieParser());
 app.use(express.json({ limit: "5mb" }));
 app.use(express.urlencoded({ limit: "5mb", extended: true }));
 
+// Protection CSRF via double-submit token (verifie les requetes mutantes)
+app.use(csrfProtection);
+
 // CORS sÃ©curisÃ©
 // Configuration flexible : utilise CORS_ORIGINS si dÃ©fini, sinon valeurs par dÃ©faut
 // Format CORS_ORIGINS: "https://mercilille.com,https://app.railway.app,http://localhost:5173"
@@ -142,7 +146,7 @@ app.use(
     },
     credentials: true,
     methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
-    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+    allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With", "X-CSRF-Token"],
     exposedHeaders: [],
     maxAge: 86400, // 24 heures pour le preflight cache
   })
@@ -219,3 +223,5 @@ connectDB().then(() => {
     logger.info({ port: PORT }, "Server running");
   });
 });
+
+

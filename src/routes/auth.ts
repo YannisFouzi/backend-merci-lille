@@ -1,8 +1,9 @@
-import crypto from "crypto";
+﻿import crypto from "crypto";
 import express from "express";
 import jwt from "jsonwebtoken";
 
 import { authMiddleware, AuthRequest } from "../middleware/auth";
+import { clearCsrfToken, issueCsrfToken } from "../middleware/csrf";
 import {
   consumeLoginAttempt,
   loginRateLimiter,
@@ -32,6 +33,11 @@ const buildCookieOptions = (maxAgeMs: number) => {
 };
 
 const router = express.Router();
+// CSRF token issuance for double-submit protection
+router.get("/csrf", (_req: Request, res: Response) => {
+  const token = issueCsrfToken(res);
+  res.json({ csrfToken: token });
+});
 
 // Login route avec validation, rate limiting et refresh token (hashé)
 router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res: Response) => {
@@ -98,6 +104,7 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
       refreshTokenString,
       buildCookieOptions(REFRESH_TOKEN_EXP_DAYS * 24 * 60 * 60 * 1000)
     );
+    issueCsrfToken(res);
 
     res.json({
       message: "Login successful",
@@ -155,6 +162,7 @@ router.post("/refresh", async (req: Request, res: Response) => {
     });
 
     res.cookie("accessToken", newAccessToken, buildCookieOptions(ACCESS_TOKEN_EXP_SECONDS * 1000));
+    issueCsrfToken(res);
 
     res.json({
       message: "Token refreshed successfully",
@@ -177,6 +185,7 @@ router.post("/logout", async (req: Request, res: Response) => {
 
     res.clearCookie("accessToken");
     res.clearCookie("refreshToken");
+    clearCsrfToken(res);
 
     res.json({ message: "Logged out successfully" });
   } catch (error) {
@@ -195,3 +204,5 @@ router.get("/verify", authMiddleware, async (req: AuthRequest, res) => {
 });
 
 export default router;
+
+
