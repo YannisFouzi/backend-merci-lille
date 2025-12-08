@@ -1,17 +1,14 @@
-import { v2 as cloudinary } from "cloudinary";
 import dotenv from "dotenv";
 import multer from "multer";
+import { v2 as cloudinary } from "cloudinary";
 import { CloudinaryStorage } from "multer-storage-cloudinary";
+
 import { logger } from "../utils/logger";
 
 dotenv.config();
 
 // Vérification de la configuration
-const requiredEnvVars = [
-  "CLOUDINARY_CLOUD_NAME",
-  "CLOUDINARY_API_KEY",
-  "CLOUDINARY_API_SECRET",
-];
+const requiredEnvVars = ["CLOUDINARY_CLOUD_NAME", "CLOUDINARY_API_KEY", "CLOUDINARY_API_SECRET"];
 
 requiredEnvVars.forEach((varName) => {
   if (!process.env[varName]) {
@@ -27,8 +24,8 @@ cloudinary.config({
 
 // Configuration du storage pour les événements
 const storage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
+  cloudinary,
+  params: async (_req, _file) => {
     const uniqueFileName = `event_${Date.now()}`;
     return {
       folder: "mercilille-events",
@@ -50,8 +47,8 @@ const storage = new CloudinaryStorage({
 
 // Configuration du storage pour la galerie
 const galleryStorage = new CloudinaryStorage({
-  cloudinary: cloudinary,
-  params: async (req, file) => {
+  cloudinary,
+  params: async (_req, _file) => {
     const uniqueFileName = `gallery_${Date.now()}`;
     return {
       folder: "mercilille-gallery",
@@ -96,26 +93,20 @@ const galleryLimits = {
 };
 
 // Validation des types MIME autorisés
-const allowedMimeTypes = [
-  "image/jpeg",
-  "image/jpg",
-  "image/png",
-  "image/webp",
-  "image/gif",
-];
+const allowedMimeTypes = ["image/jpeg", "image/jpg", "image/png", "image/webp", "image/gif"];
 
 // Fonction de filtrage des fichiers
-const fileFilter = (req: any, file: any, cb: any) => {
+const fileFilter = (
+  req: Express.Request,
+  file: Express.Multer.File,
+  cb: (error: Error | null, acceptFile?: boolean) => void
+) => {
   // Vérifier le type MIME
   if (allowedMimeTypes.includes(file.mimetype)) {
     cb(null, true);
   } else {
     cb(
-      new Error(
-        `Type de fichier non autorisé. Types acceptés: ${allowedMimeTypes.join(
-          ", "
-        )}`
-      ),
+      new Error(`Type de fichier non autorisé. Types acceptés: ${allowedMimeTypes.join(", ")}`),
       false
     );
   }

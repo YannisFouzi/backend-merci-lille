@@ -1,20 +1,25 @@
 import crypto from "crypto";
-import express, { Request, Response } from "express";
+import express from "express";
 import jwt from "jsonwebtoken";
+
 import { authMiddleware, AuthRequest } from "../middleware/auth";
-import { consumeLoginAttempt, loginRateLimiter, resetLoginAttempts } from "../middleware/rateLimiter";
+import {
+  consumeLoginAttempt,
+  loginRateLimiter,
+  resetLoginAttempts,
+} from "../middleware/rateLimiter";
 import { validateLogin } from "../middleware/validation";
 import { Admin } from "../models/Admin";
 import { RefreshToken } from "../models/RefreshToken";
 import { logger } from "../utils/logger";
+import type { Request, Response } from "express";
 
 const ACCESS_TOKEN_SECRET = process.env.JWT_SECRET as string;
 const REFRESH_TOKEN_SECRET = process.env.REFRESH_JWT_SECRET as string;
 const ACCESS_TOKEN_EXP_SECONDS = 15 * 60; // 15 minutes
 const REFRESH_TOKEN_EXP_DAYS = 7; // 7 days
 
-const hashToken = (token: string) =>
-  crypto.createHash("sha256").update(token).digest("hex");
+const hashToken = (token: string) => crypto.createHash("sha256").update(token).digest("hex");
 
 const buildCookieOptions = (maxAgeMs: number) => {
   const isSecure = process.env.NODE_ENV === "production";
@@ -65,17 +70,13 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
       );
     }
 
-    const accessToken = jwt.sign(
-      { id: admin._id, type: "access" },
-      ACCESS_TOKEN_SECRET,
-      { expiresIn: `${ACCESS_TOKEN_EXP_SECONDS}s` }
-    );
+    const accessToken = jwt.sign({ id: admin._id, type: "access" }, ACCESS_TOKEN_SECRET, {
+      expiresIn: `${ACCESS_TOKEN_EXP_SECONDS}s`,
+    });
 
-    const refreshTokenString = jwt.sign(
-      { id: admin._id, type: "refresh" },
-      REFRESH_TOKEN_SECRET,
-      { expiresIn: `${REFRESH_TOKEN_EXP_DAYS}d` }
-    );
+    const refreshTokenString = jwt.sign({ id: admin._id, type: "refresh" }, REFRESH_TOKEN_SECRET, {
+      expiresIn: `${REFRESH_TOKEN_EXP_DAYS}d`,
+    });
 
     const expiresAt = new Date();
     expiresAt.setDate(expiresAt.getDate() + REFRESH_TOKEN_EXP_DAYS);
@@ -92,7 +93,11 @@ router.post("/login", loginRateLimiter, validateLogin, async (req: Request, res:
     await resetLoginAttempts(ip);
 
     res.cookie("accessToken", accessToken, buildCookieOptions(ACCESS_TOKEN_EXP_SECONDS * 1000));
-    res.cookie("refreshToken", refreshTokenString, buildCookieOptions(REFRESH_TOKEN_EXP_DAYS * 24 * 60 * 60 * 1000));
+    res.cookie(
+      "refreshToken",
+      refreshTokenString,
+      buildCookieOptions(REFRESH_TOKEN_EXP_DAYS * 24 * 60 * 60 * 1000)
+    );
 
     res.json({
       message: "Login successful",
@@ -145,11 +150,9 @@ router.post("/refresh", async (req: Request, res: Response) => {
     storedToken.lastUsedAt = new Date();
     await storedToken.save();
 
-    const newAccessToken = jwt.sign(
-      { id: decoded.id, type: "access" },
-      ACCESS_TOKEN_SECRET,
-      { expiresIn: `${ACCESS_TOKEN_EXP_SECONDS}s` }
-    );
+    const newAccessToken = jwt.sign({ id: decoded.id, type: "access" }, ACCESS_TOKEN_SECRET, {
+      expiresIn: `${ACCESS_TOKEN_EXP_SECONDS}s`,
+    });
 
     res.cookie("accessToken", newAccessToken, buildCookieOptions(ACCESS_TOKEN_EXP_SECONDS * 1000));
 
@@ -169,10 +172,7 @@ router.post("/logout", async (req: Request, res: Response) => {
     const refreshToken = req.cookies.refreshToken;
 
     if (refreshToken) {
-      await RefreshToken.updateOne(
-        { tokenHash: hashToken(refreshToken) },
-        { isRevoked: true }
-      );
+      await RefreshToken.updateOne({ tokenHash: hashToken(refreshToken) }, { isRevoked: true });
     }
 
     res.clearCookie("accessToken");

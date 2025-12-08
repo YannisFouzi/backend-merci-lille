@@ -1,6 +1,6 @@
-import { NextFunction, Request, Response } from "express";
-import { RateLimiterMongo } from "rate-limiter-flexible";
 import mongoose from "mongoose";
+import { RateLimiterMongo } from "rate-limiter-flexible";
+import type { NextFunction, Request, Response } from "express";
 import { logger } from "../utils/logger";
 
 /**
@@ -30,11 +30,7 @@ export function initRateLimiter() {
  * Middleware de rate limiting pour les routes sensibles (login).
  * Vérifie si l'IP est bloquée sans consommer de points.
  */
-export const loginRateLimiter = async (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const loginRateLimiter = async (req: Request, res: Response, next: NextFunction) => {
   try {
     if (!rateLimiterMongo) {
       logger.warn("Rate limiter pas encore initialisé, requête autorisée");

@@ -66,4 +66,3 @@ export const RefreshToken = mongoose.model<IRefreshToken, RefreshTokenModel>(
   "RefreshToken",
   refreshTokenSchema
 );
-

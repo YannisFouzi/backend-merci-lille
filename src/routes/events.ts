@@ -1,11 +1,8 @@
-﻿import express, { NextFunction, Request, Response } from "express";
+﻿import express from "express";
+import type { NextFunction, Request, Response } from "express";
 import { deleteImage, upload } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
-import {
-  validateEvent,
-  validateEventUpdate,
-  validateUrlId,
-} from "../middleware/validation";
+import { validateEvent, validateEventUpdate, validateUrlId } from "../middleware/validation";
 import { Event } from "../models/Event";
 import { logger } from "../utils/logger";
 
@@ -48,8 +45,10 @@ async function renumberVisibleEvents() {
       logger.info(`Renumerotation : ${hiddenEvents.length} evenement(s) masques marques`);
 
       // Recuperer tous les evenements NON masques, tries par order puis par date de creation
-      const visibleEvents = await Event.find({ isHidden: { $ne: true } })
-        .sort({ order: 1, createdAt: -1 });
+      const visibleEvents = await Event.find({ isHidden: { $ne: true } }).sort({
+        order: 1,
+        createdAt: -1,
+      });
 
       logger.info(`Renumerotation : ${visibleEvents.length} evenements visibles a traiter`);
 
@@ -85,7 +84,7 @@ router.get("/", async (req: Request, res: Response) => {
     // Sinon, filtrer les Ã©vÃ©nements masquÃ©s
     const includeHidden = req.query.includeHidden === "true";
     const filter = includeHidden ? {} : { isHidden: { $ne: true } };
-    
+
     const events = await Event.find(filter).sort({ order: 1, createdAt: -1 });
     res.json(events);
   } catch (error) {
@@ -146,11 +145,7 @@ router.post(
       }
 
       const isFree = req.body.isFree === "true" || req.body.isFree === true;
-      const priceValue = isFree
-        ? 0
-        : req.body.price
-        ? Number.parseFloat(req.body.price)
-        : 0;
+      const priceValue = isFree ? 0 : req.body.price ? Number.parseFloat(req.body.price) : 0;
 
       const eventData = {
         ...req.body,
@@ -174,53 +169,41 @@ router.post(
 );
 
 // Route pour mettre Ã  jour l'ordre des Ã©vÃ©nements (AVANT /:id pour Ã©viter les conflits)
-router.put(
-  "/update-order",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      await withRenumberLock(async () => {
-        const { orderedIds } = req.body;
+router.put("/update-order", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    await withRenumberLock(async () => {
+      const { orderedIds } = req.body;
 
-        if (!orderedIds || !Array.isArray(orderedIds)) {
-          return res
-            .status(400)
-            .json({ message: "Invalid ordered IDs provided" });
-        }
+      if (!orderedIds || !Array.isArray(orderedIds)) {
+        return res.status(400).json({ message: "Invalid ordered IDs provided" });
+      }
 
-        // ETAPE 1 : Mettre des eventNumber temporaires pour eviter les conflits de unique constraint
-        // On utilise des prefix es "TEMP_" pour eviter les doublons pendant la mise a jour
-        for (let i = 0; i < orderedIds.length; i++) {
-          await Event.findByIdAndUpdate(
-            orderedIds[i],
-            {
-              order: i,
-              eventNumber: `TEMP_${i}_${Date.now()}`,
-            }
-          );
-        }
+      // ETAPE 1 : Mettre des eventNumber temporaires pour eviter les conflits de unique constraint
+      // On utilise des prefix es "TEMP_" pour eviter les doublons pendant la mise a jour
+      for (let i = 0; i < orderedIds.length; i++) {
+        await Event.findByIdAndUpdate(orderedIds[i], {
+          order: i,
+          eventNumber: `TEMP_${i}_${Date.now()}`,
+        });
+      }
 
-        // ETAPE 2 : Renumeroter avec les vrais numeros (ordre inverse)
-        // Le premier visuel (en haut) = dernier numero, le dernier visuel (en bas) = #001
-        // Car on affiche les evenements recents en premier
-        for (let i = 0; i < orderedIds.length; i++) {
-          const paddedNumber = String(orderedIds.length - i).padStart(3, "0");
-          await Event.findByIdAndUpdate(
-            orderedIds[i],
-            {
-              eventNumber: paddedNumber,
-            }
-          );
-        }
-      });
+      // ETAPE 2 : Renumeroter avec les vrais numeros (ordre inverse)
+      // Le premier visuel (en haut) = dernier numero, le dernier visuel (en bas) = #001
+      // Car on affiche les evenements recents en premier
+      for (let i = 0; i < orderedIds.length; i++) {
+        const paddedNumber = String(orderedIds.length - i).padStart(3, "0");
+        await Event.findByIdAndUpdate(orderedIds[i], {
+          eventNumber: paddedNumber,
+        });
+      }
+    });
 
-      res.json({ message: "Event order updated successfully" });
-    } catch (error) {
-      logger.error({ err: error }, "Error updating event order");
-      res.status(500).json({ message: "Error updating event order" });
-    }
+    res.json({ message: "Event order updated successfully" });
+  } catch (error) {
+    logger.error({ err: error }, "Error updating event order");
+    res.status(500).json({ message: "Error updating event order" });
   }
-);
+});
 
 // Mise Ã  jour avec validation d'URL
 router.put(
@@ -269,15 +252,13 @@ router.put(
       }
 
       const isFree =
-        req.body.isFree === "true" ||
-        req.body.isFree === true ||
-        req.body.isFree === "on";
+        req.body.isFree === "true" || req.body.isFree === true || req.body.isFree === "on";
 
       const priceValue = isFree
         ? 0
         : req.body.price !== undefined
-        ? Number.parseFloat(req.body.price)
-        : event.price ?? 0;
+          ? Number.parseFloat(req.body.price)
+          : (event.price ?? 0);
 
       const updatedFields = {
         ...req.body,
@@ -301,181 +282,131 @@ router.put(
 );
 
 // Suppression avec validation d'URL et logs nettoyÃ©s
-router.delete(
-  "/:id",
-  validateUrlId,
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const event = await Event.findById(req.params.id);
-      if (!event) {
-        return res.status(404).json({ message: "Event not found" });
-      }
-
-      if (event.imagePublicId) {
-        await deleteImage(event.imagePublicId);
-      }
-
-      await Event.findByIdAndDelete(req.params.id);
-      
-      // RenumÃ©roter tous les Ã©vÃ©nements visibles aprÃ¨s suppression
-      await renumberVisibleEvents();
-      
-      res.json({ message: "Event deleted successfully" });
-    } catch (error) {
-      logger.error("Error deleting event");
-      res.status(500).json({
-        message: "Error deleting event",
-      });
+router.delete("/:id", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const event = await Event.findById(req.params.id);
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
     }
+
+    if (event.imagePublicId) {
+      await deleteImage(event.imagePublicId);
+    }
+
+    await Event.findByIdAndDelete(req.params.id);
+
+    // RenumÃ©roter tous les Ã©vÃ©nements visibles aprÃ¨s suppression
+    await renumberVisibleEvents();
+
+    res.json({ message: "Event deleted successfully" });
+  } catch (error) {
+    logger.error("Error deleting event");
+    res.status(500).json({
+      message: "Error deleting event",
+    });
   }
-);
+});
 
 // Masquer un Ã©vÃ©nement
-router.patch(
-  "/:id/hide",
-  validateUrlId,
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const event = await Event.findByIdAndUpdate(
-        req.params.id,
-        { isHidden: true },
-        { new: true }
-      );
-      if (!event) {
-        return res.status(404).json({ message: "Event not found" });
-      }
-      
-      // RenumÃ©roter tous les Ã©vÃ©nements visibles
-      await renumberVisibleEvents();
-      
-      res.json(event);
-    } catch (error) {
-      logger.error("Error hiding event");
-      res.status(500).json({ message: "Error hiding event" });
+router.patch("/:id/hide", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const event = await Event.findByIdAndUpdate(req.params.id, { isHidden: true }, { new: true });
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
     }
+
+    // RenumÃ©roter tous les Ã©vÃ©nements visibles
+    await renumberVisibleEvents();
+
+    res.json(event);
+  } catch (error) {
+    logger.error("Error hiding event");
+    res.status(500).json({ message: "Error hiding event" });
   }
-);
+});
 
 // DÃ©masquer un Ã©vÃ©nement
-router.patch(
-  "/:id/unhide",
-  validateUrlId,
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const event = await Event.findByIdAndUpdate(
-        req.params.id,
-        { isHidden: false },
-        { new: true }
-      );
-      if (!event) {
-        return res.status(404).json({ message: "Event not found" });
-      }
-      
-      // RenumÃ©roter tous les Ã©vÃ©nements visibles
-      await renumberVisibleEvents();
-      
-      res.json(event);
-    } catch (error) {
-      logger.error("Error unhiding event");
-      res.status(500).json({ message: "Error unhiding event" });
+router.patch("/:id/unhide", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const event = await Event.findByIdAndUpdate(req.params.id, { isHidden: false }, { new: true });
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
     }
+
+    // RenumÃ©roter tous les Ã©vÃ©nements visibles
+    await renumberVisibleEvents();
+
+    res.json(event);
+  } catch (error) {
+    logger.error("Error unhiding event");
+    res.status(500).json({ message: "Error unhiding event" });
   }
-);
+});
 
 // Masquer plusieurs Ã©vÃ©nements
-router.post(
-  "/hide-multiple",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const { eventIds } = req.body;
-      if (!eventIds || !Array.isArray(eventIds)) {
-        return res.status(400).json({ message: "Invalid event IDs provided" });
-      }
-
-      await Event.updateMany(
-        { _id: { $in: eventIds } },
-        { isHidden: true }
-      );
-
-      // RenumÃ©roter tous les Ã©vÃ©nements visibles
-      await renumberVisibleEvents();
-
-      res.json({ message: `${eventIds.length} event(s) hidden successfully` });
-    } catch (error) {
-      logger.error("Error hiding events");
-      res.status(500).json({ message: "Error hiding events" });
+router.post("/hide-multiple", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { eventIds } = req.body;
+    if (!eventIds || !Array.isArray(eventIds)) {
+      return res.status(400).json({ message: "Invalid event IDs provided" });
     }
+
+    await Event.updateMany({ _id: { $in: eventIds } }, { isHidden: true });
+
+    // RenumÃ©roter tous les Ã©vÃ©nements visibles
+    await renumberVisibleEvents();
+
+    res.json({ message: `${eventIds.length} event(s) hidden successfully` });
+  } catch (error) {
+    logger.error("Error hiding events");
+    res.status(500).json({ message: "Error hiding events" });
   }
-);
+});
 
 // DÃ©masquer plusieurs Ã©vÃ©nements
-router.post(
-  "/unhide-multiple",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const { eventIds } = req.body;
-      if (!eventIds || !Array.isArray(eventIds)) {
-        return res.status(400).json({ message: "Invalid event IDs provided" });
-      }
-
-      await Event.updateMany(
-        { _id: { $in: eventIds } },
-        { isHidden: false }
-      );
-
-      // RenumÃ©roter tous les Ã©vÃ©nements visibles
-      await renumberVisibleEvents();
-
-      res.json({ message: `${eventIds.length} event(s) unhidden successfully` });
-    } catch (error) {
-      logger.error("Error unhiding events");
-      res.status(500).json({ message: "Error unhiding events" });
+router.post("/unhide-multiple", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { eventIds } = req.body;
+    if (!eventIds || !Array.isArray(eventIds)) {
+      return res.status(400).json({ message: "Invalid event IDs provided" });
     }
+
+    await Event.updateMany({ _id: { $in: eventIds } }, { isHidden: false });
+
+    // RenumÃ©roter tous les Ã©vÃ©nements visibles
+    await renumberVisibleEvents();
+
+    res.json({ message: `${eventIds.length} event(s) unhidden successfully` });
+  } catch (error) {
+    logger.error("Error unhiding events");
+    res.status(500).json({ message: "Error unhiding events" });
   }
-);
+});
 
 // Route utilitaire pour forcer la renumÃ©rotation (pour corriger manuellement si besoin)
-router.post(
-  "/renumber-all",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      await renumberVisibleEvents();
-      res.json({ message: "All visible events renumbered successfully" });
-    } catch (error) {
-      logger.error("Error renumbering events");
-      res.status(500).json({ message: "Error renumbering events" });
-    }
+router.post("/renumber-all", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    await renumberVisibleEvents();
+    res.json({ message: "All visible events renumbered successfully" });
+  } catch (error) {
+    logger.error("Error renumbering events");
+    res.status(500).json({ message: "Error renumbering events" });
   }
-);
+});
 
 // Marquer un Ã©vÃ©nement comme phare
-router.patch(
-  "/:id/feature",
-  validateUrlId,
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const event = await Event.findByIdAndUpdate(
-        req.params.id,
-        { isFeatured: true },
-        { new: true }
-      );
-      if (!event) {
-        return res.status(404).json({ message: "Event not found" });
-      }
-      res.json(event);
-    } catch (error) {
-      logger.error("Error featuring event");
-      res.status(500).json({ message: "Error featuring event" });
+router.patch("/:id/feature", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const event = await Event.findByIdAndUpdate(req.params.id, { isFeatured: true }, { new: true });
+    if (!event) {
+      return res.status(404).json({ message: "Event not found" });
     }
+    res.json(event);
+  } catch (error) {
+    logger.error("Error featuring event");
+    res.status(500).json({ message: "Error featuring event" });
   }
-);
+});
 
 // Retirer le statut phare d'un Ã©vÃ©nement
 router.patch(
@@ -501,55 +432,37 @@ router.patch(
 );
 
 // Marquer plusieurs Ã©vÃ©nements comme phares
-router.post(
-  "/feature-multiple",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const { eventIds } = req.body;
-      if (!eventIds || !Array.isArray(eventIds)) {
-        return res.status(400).json({ message: "Invalid event IDs provided" });
-      }
-
-      await Event.updateMany(
-        { _id: { $in: eventIds } },
-        { isFeatured: true }
-      );
-
-      res.json({ message: `${eventIds.length} event(s) marked as featured successfully` });
-    } catch (error) {
-      logger.error("Error featuring events");
-      res.status(500).json({ message: "Error featuring events" });
+router.post("/feature-multiple", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { eventIds } = req.body;
+    if (!eventIds || !Array.isArray(eventIds)) {
+      return res.status(400).json({ message: "Invalid event IDs provided" });
     }
+
+    await Event.updateMany({ _id: { $in: eventIds } }, { isFeatured: true });
+
+    res.json({ message: `${eventIds.length} event(s) marked as featured successfully` });
+  } catch (error) {
+    logger.error("Error featuring events");
+    res.status(500).json({ message: "Error featuring events" });
   }
-);
+});
 
 // Retirer le statut phare de plusieurs Ã©vÃ©nements
-router.post(
-  "/unfeature-multiple",
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const { eventIds } = req.body;
-      if (!eventIds || !Array.isArray(eventIds)) {
-        return res.status(400).json({ message: "Invalid event IDs provided" });
-      }
-
-      await Event.updateMany(
-        { _id: { $in: eventIds } },
-        { isFeatured: false }
-      );
-
-      res.json({ message: `${eventIds.length} event(s) unmarked as featured successfully` });
-    } catch (error) {
-      logger.error("Error unfeaturing events");
-      res.status(500).json({ message: "Error unfeaturing events" });
+router.post("/unfeature-multiple", authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const { eventIds } = req.body;
+    if (!eventIds || !Array.isArray(eventIds)) {
+      return res.status(400).json({ message: "Invalid event IDs provided" });
     }
+
+    await Event.updateMany({ _id: { $in: eventIds } }, { isFeatured: false });
+
+    res.json({ message: `${eventIds.length} event(s) unmarked as featured successfully` });
+  } catch (error) {
+    logger.error("Error unfeaturing events");
+    res.status(500).json({ message: "Error unfeaturing events" });
   }
-);
+});
 
 export default router;
-
-
-
-

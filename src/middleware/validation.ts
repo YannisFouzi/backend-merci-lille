@@ -1,12 +1,8 @@
-import { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import { body, param, validationResult } from "express-validator";
 
 // Middleware pour gérer les erreurs de validation
-export const handleValidationErrors = (
-  req: Request,
-  res: Response,
-  next: NextFunction
-) => {
+export const handleValidationErrors = (req: Request, res: Response, next: NextFunction) => {
   const errors = validationResult(req);
   if (!errors.isEmpty()) {
     return res.status(400).json({
@@ -58,10 +54,7 @@ export const validateEvent = [
     .withMessage("Le pays doit faire moins de 100 caractères")
     .escape(),
 
-  body("date")
-    .isISO8601()
-    .withMessage("La date doit être au format ISO8601 valide")
-    .toDate(),
+  body("date").isISO8601().withMessage("La date doit être au format ISO8601 valide").toDate(),
 
   body("time")
     .matches(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/)
@@ -73,11 +66,7 @@ export const validateEvent = [
     .withMessage("Le prix doit être un nombre entre 0 et 9999.99")
     .toFloat(),
 
-  body("isFree")
-    .optional()
-    .isBoolean()
-    .withMessage("isFree doit être un booléen")
-    .toBoolean(),
+  body("isFree").optional().isBoolean().withMessage("isFree doit être un booléen").toBoolean(),
 
   body("ticketLink")
     .trim()
@@ -144,11 +133,7 @@ export const validateEventUpdate = [
     .withMessage("Le prix doit être un nombre entre 0 et 9999.99")
     .toFloat(),
 
-  body("isFree")
-    .optional()
-    .isBoolean()
-    .withMessage("isFree doit être un booléen")
-    .toBoolean(),
+  body("isFree").optional().isBoolean().withMessage("isFree doit être un booléen").toBoolean(),
 
   body("ticketLink")
     .optional()
@@ -177,10 +162,7 @@ export const validateUrlId = [
 
 // Validation pour les IDs MongoDB dans le body (existant)
 export const validateMongoId = (paramName: string = "id") => [
-  body(paramName)
-    .optional()
-    .isMongoId()
-    .withMessage(`${paramName} doit être un ID MongoDB valide`),
+  body(paramName).optional().isMongoId().withMessage(`${paramName} doit être un ID MongoDB valide`),
 
   handleValidationErrors,
 ];
@@ -191,9 +173,7 @@ export const validateImageIds = [
     .isArray({ min: 1, max: 50 })
     .withMessage("imageIds doit être un tableau de 1 à 50 éléments"),
 
-  body("imageIds.*")
-    .isMongoId()
-    .withMessage("Chaque ID d'image doit être un ID MongoDB valide"),
+  body("imageIds.*").isMongoId().withMessage("Chaque ID d'image doit être un ID MongoDB valide"),
 
   handleValidationErrors,
 ];
@@ -204,9 +184,7 @@ export const validateImageOrder = [
     .isArray({ min: 1, max: 100 })
     .withMessage("orderedIds doit être un tableau de 1 à 100 éléments"),
 
-  body("orderedIds.*")
-    .isMongoId()
-    .withMessage("Chaque ID doit être un ID MongoDB valide"),
+  body("orderedIds.*").isMongoId().withMessage("Chaque ID doit être un ID MongoDB valide"),
 
   handleValidationErrors,
 ];

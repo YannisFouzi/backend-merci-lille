@@ -113,22 +113,25 @@ eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
         // Trouver le dernier événement NON masqué avec un numéro valide (pas HIDDEN_ ou TEMP_)
         const lastEvent = await mongoose
           .model("Event")
-          .findOne({ 
+          .findOne({
             isHidden: { $ne: true },
-            eventNumber: { $regex: /^[0-9]+$/ } // Seulement les numéros numériques
+            eventNumber: { $regex: /^[0-9]+$/ }, // Seulement les numéros numériques
           })
           .sort({ eventNumber: -1 });
 
-        const nextNumber = lastEvent && lastEvent.eventNumber
-          ? String(Number(lastEvent.eventNumber) + 1)
-          : "1";
+        const nextNumber =
+          lastEvent && lastEvent.eventNumber ? String(Number(lastEvent.eventNumber) + 1) : "1";
 
         this.eventNumber = nextNumber.padStart(3, "0");
       } catch (error) {
         return next(error as CallbackError);
       }
     }
-  } else if (this.eventNumber && !this.eventNumber.startsWith("HIDDEN_") && !this.eventNumber.startsWith("TEMP_")) {
+  } else if (
+    this.eventNumber &&
+    !this.eventNumber.startsWith("HIDDEN_") &&
+    !this.eventNumber.startsWith("TEMP_")
+  ) {
     // Formater les numéros numériques existants
     this.eventNumber = this.eventNumber.padStart(3, "0");
   }
@@ -137,8 +140,8 @@ eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
       this.genres = Array.isArray(this.genres)
         ? this.genres
         : typeof this.genres === "string"
-        ? JSON.parse(this.genres)
-        : [];
+          ? JSON.parse(this.genres)
+          : [];
     }
   } catch (e) {
     logger.error({ err: e }, "Error processing genres");
@@ -173,8 +176,7 @@ export const validateEvent = async (eventData: any) => {
   } catch (error) {
     return {
       isValid: false,
-      errors:
-        error instanceof Error ? error.message : "Unknown validation error",
+      errors: error instanceof Error ? error.message : "Unknown validation error",
     };
   }
 };

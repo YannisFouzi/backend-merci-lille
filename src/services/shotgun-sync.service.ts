@@ -64,9 +64,7 @@ class ShotgunSyncService {
   /**
    * Convertit un Ã©vÃ©nement Shotgun vers le format de notre modÃ¨le Event
    */
-  private async mapShotgunEventToEvent(
-    shotgunEvent: ShotgunEvent
-  ): Promise<Partial<any>> {
+  private async mapShotgunEventToEvent(shotgunEvent: ShotgunEvent): Promise<Partial<any>> {
     // Extraire la date et l'heure
     const startDate = new Date(shotgunEvent.startTime);
     const time = startDate.toLocaleTimeString("fr-FR", {
@@ -91,10 +89,11 @@ class ShotgunSyncService {
     }
 
     // DÃ©terminer si c'est gratuit ou payant
-    const minPrice = shotgunEvent.deals && shotgunEvent.deals.length > 0
-      ? Math.min(...shotgunEvent.deals.map(d => d.price))
-      : 0;
-    
+    const minPrice =
+      shotgunEvent.deals && shotgunEvent.deals.length > 0
+        ? Math.min(...shotgunEvent.deals.map((d) => d.price))
+        : 0;
+
     const isFree = minPrice === 0;
     const price = isFree ? "0" : minPrice.toString();
 
@@ -102,9 +101,7 @@ class ShotgunSyncService {
     const isPast = startDate < new Date();
 
     // Extraire les genres
-    const genres = shotgunEvent.genres
-      ? shotgunEvent.genres.map(g => g.name)
-      : [];
+    const genres = shotgunEvent.genres ? shotgunEvent.genres.map((g) => g.name) : [];
 
     return {
       title: shotgunEvent.name,
@@ -159,12 +156,8 @@ class ShotgunSyncService {
           const mappedData = await this.mapShotgunEventToEvent(shotgunEvent);
 
           if (!mappedData.imageSrc) {
-            logger.warn(
-              `âš ï¸  Skipping event "${shotgunEvent.name}" - no image available`
-            );
-            result.errors.push(
-              `Event "${shotgunEvent.name}": Image upload failed`
-            );
+            logger.warn(`âš ï¸  Skipping event "${shotgunEvent.name}" - no image available`);
+            result.errors.push(`Event "${shotgunEvent.name}": Image upload failed`);
             continue;
           }
 
@@ -239,6 +232,3 @@ class ShotgunSyncService {
 
 export const shotgunSyncService = new ShotgunSyncService();
 export type { SyncResult };
-
-
-

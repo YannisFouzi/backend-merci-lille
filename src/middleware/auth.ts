@@ -1,4 +1,4 @@
-import { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
 import jwt from "jsonwebtoken";
 import { logger } from "../utils/logger";
 
@@ -6,11 +6,7 @@ export interface AuthRequest extends Request {
   admin?: { id: string };
 }
 
-export const authMiddleware = (
-  req: AuthRequest,
-  res: Response,
-  next: NextFunction
-) => {
+export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
     // Lire le token depuis les cookies (priorité 1)
     let token = req.cookies?.accessToken;

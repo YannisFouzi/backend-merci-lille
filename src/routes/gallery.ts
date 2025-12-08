@@ -1,11 +1,7 @@
 ﻿import express, { NextFunction, Request, Response } from "express";
 import { deleteImage, uploadGallery } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
-import {
-  validateImageIds,
-  validateImageOrder,
-  validateUrlId,
-} from "../middleware/validation";
+import { validateImageIds, validateImageOrder, validateUrlId } from "../middleware/validation";
 import { Gallery } from "../models/Gallery";
 import { logger } from "../utils/logger";
 
@@ -141,9 +137,7 @@ router.put(
       const { orderedIds } = req.body;
 
       if (!orderedIds || !Array.isArray(orderedIds)) {
-        return res
-          .status(400)
-          .json({ message: "Invalid ordered IDs provided" });
+        return res.status(400).json({ message: "Invalid ordered IDs provided" });
       }
 
       // Mettre Ã  jour l'ordre de chaque image
@@ -162,27 +156,21 @@ router.put(
 );
 
 // Route pour suppression unique avec validation d'URL
-router.delete(
-  "/:id",
-  validateUrlId,
-  authMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const image = await Gallery.findById(req.params.id);
-      if (!image) {
-        return res.status(404).json({ message: "Image not found" });
-      }
-
-      await deleteImage(image.imagePublicId);
-      await Gallery.findByIdAndDelete(req.params.id);
-
-      res.json({ message: "Image deleted successfully" });
-    } catch (error) {
-      logger.error("Error deleting gallery image");
-      res.status(500).json({ message: "Error deleting image" });
+router.delete("/:id", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
+  try {
+    const image = await Gallery.findById(req.params.id);
+    if (!image) {
+      return res.status(404).json({ message: "Image not found" });
     }
+
+    await deleteImage(image.imagePublicId);
+    await Gallery.findByIdAndDelete(req.params.id);
+
+    res.json({ message: "Image deleted successfully" });
+  } catch (error) {
+    logger.error("Error deleting gallery image");
+    res.status(500).json({ message: "Error deleting image" });
   }
-);
+});
 
 export default router;
-

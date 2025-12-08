@@ -1,10 +1,11 @@
-﻿import "dotenv/config"; // âš ï¸ IMPORTANT : Charger les variables d'environnement en PREMIER
+import "dotenv/config"; // IMPORTANT : Charger les variables d'environnement en PREMIER
 import cookieParser from "cookie-parser";
 import cors from "cors";
 import express from "express";
 import mongoSanitize from "express-mongo-sanitize";
 import rateLimit from "express-rate-limit";
 import helmet from "helmet";
+
 import { connectDB } from "./config/database";
 import { initRateLimiter } from "./middleware/rateLimiter";
 import authRoutes from "./routes/auth";
@@ -60,18 +61,6 @@ const generalLimiter = rateLimit({
   legacyHeaders: false,
 });
 
-// Rate limiting pour l'authentification (plus strict)
-const authLimiter = rateLimit({
-  windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // Max 5 tentatives de connexion par IP
-  message: {
-    error:
-      "Trop de tentatives de connexion, veuillez rÃ©essayer dans 15 minutes.",
-  },
-  standardHeaders: true,
-  legacyHeaders: false,
-});
-
 // Rate limiting pour les uploads (trÃ¨s strict)
 const uploadLimiter = rateLimit({
   windowMs: 60 * 1000, // 1 minute
@@ -96,7 +85,9 @@ app.use(express.urlencoded({ limit: "5mb", extended: true }));
 // Configuration flexible : utilise CORS_ORIGINS si dÃ©fini, sinon valeurs par dÃ©faut
 // Format CORS_ORIGINS: "https://mercilille.com,https://app.railway.app,http://localhost:5173"
 const allowedOrigins = process.env.CORS_ORIGINS
-  ? process.env.CORS_ORIGINS.split(",").map((origin) => origin.trim()).filter(Boolean)
+  ? process.env.CORS_ORIGINS.split(",")
+      .map((origin) => origin.trim())
+      .filter(Boolean)
   : ["https://mercilille.com", "http://localhost:5173"];
 
 // Validation des origines (sÃ©curitÃ© supplÃ©mentaire)
@@ -104,7 +95,11 @@ const isValidOrigin = (origin: string): boolean => {
   try {
     const url = new URL(origin);
     // Autoriser uniquement HTTPS en production (sauf localhost)
-    if (process.env.NODE_ENV === "production" && url.protocol !== "https:" && !origin.includes("localhost")) {
+    if (
+      process.env.NODE_ENV === "production" &&
+      url.protocol !== "https:" &&
+      !origin.includes("localhost")
+    ) {
       return false;
     }
     return true;
@@ -116,9 +111,10 @@ const isValidOrigin = (origin: string): boolean => {
 const validatedOrigins = allowedOrigins.filter(isValidOrigin);
 
 // Fallback vers les origines par dÃ©faut si aucune origine valide n'est trouvÃ©e
-const finalOrigins = validatedOrigins.length > 0 
-  ? validatedOrigins 
-  : ["https://mercilille.com", "http://localhost:5173"];
+const finalOrigins =
+  validatedOrigins.length > 0
+    ? validatedOrigins
+    : ["https://mercilille.com", "http://localhost:5173"];
 
 if (validatedOrigins.length === 0 && process.env.CORS_ORIGINS) {
   logger.warn(
@@ -127,10 +123,7 @@ if (validatedOrigins.length === 0 && process.env.CORS_ORIGINS) {
   );
 }
 
-logger.info(
-  { origins: finalOrigins, count: finalOrigins.length },
-  "CORS origins configured"
-);
+logger.info({ origins: finalOrigins, count: finalOrigins.length }, "CORS origins configured");
 
 app.use(
   cors({
@@ -200,33 +193,29 @@ app.use("/api/events", eventRoutes);
 app.use("/api/gallery", uploadLimiter, galleryRoutes);
 app.use("/api/shotgun-sync", shotgunSyncRoutes);
 
-app.use(
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  (err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
-    logger.error(
-      {
-        err,
-        path: req.path,
-        method: req.method,
-      },
-      "Unhandled error"
-    );
+app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+  logger.error(
+    {
+      err,
+      path: req.path,
+      method: req.method,
+    },
+    "Unhandled error"
+  );
 
-    if (res.headersSent) {
-      return next(err);
-    }
-
-    return res.status(500).json({ message: "Une erreur inattendue s'est produite" });
+  if (res.headersSent) {
+    return next(err);
   }
-);
+
+  return res.status(500).json({ message: "Une erreur inattendue s'est produite" });
+});
 
 // Connect to database and start server
 connectDB().then(() => {
   // Initialiser le rate limiter APRÃˆS connexion MongoDB
   initRateLimiter();
-  
+
   app.listen(PORT, () => {
     logger.info({ port: PORT }, "Server running");
   });
 });
-
