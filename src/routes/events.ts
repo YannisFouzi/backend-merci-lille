@@ -1,5 +1,6 @@
-﻿import express from "express";
+import express from "express";
 import type { NextFunction, Request, Response } from "express";
+import type { MulterError } from "multer";
 import { deleteImage, upload } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
 import { validateEvent, validateEventUpdate, validateUrlId } from "../middleware/validation";
@@ -25,9 +26,9 @@ async function withRenumberLock<T>(fn: () => Promise<T>): Promise<T> {
 }
 
 /**
- * Fonction utilitaire pour renumÃ©roter tous les Ã©vÃ©nements NON masquÃ©s
- * Les Ã©vÃ©nements masquÃ©s auront un eventNumber null
- * Utilise une stratÃ©gie en 3 temps pour Ã©viter les conflits de clÃ©s uniques
+ * Fonction utilitaire pour renuméroter tous les événements NON masqués
+ * Les événements masqués auront un eventNumber null
+ * Utilise une stratégie en 3 temps pour éviter les conflits de clés uniques
  */
 async function renumberVisibleEvents() {
   return withRenumberLock(async () => {
@@ -80,8 +81,8 @@ async function renumberVisibleEvents() {
 // Routes publiques
 router.get("/", async (req: Request, res: Response) => {
   try {
-    // Si c'est une requÃªte admin (via query param), retourner TOUS les Ã©vÃ©nements
-    // Sinon, filtrer les Ã©vÃ©nements masquÃ©s
+    // Si c'est une requête admin (via query param), retourner TOUS les événements
+    // Sinon, filtrer les événements masqués
     const includeHidden = req.query.includeHidden === "true";
     const filter = includeHidden ? {} : { isHidden: { $ne: true } };
 
@@ -93,7 +94,7 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// Validation d'URL ajoutÃ©e
+// Validation d'URL ajoutée
 router.get("/:id", validateUrlId, async (req: Request, res: Response) => {
   try {
     const event = await Event.findById(req.params.id);
@@ -107,28 +108,29 @@ router.get("/:id", validateUrlId, async (req: Request, res: Response) => {
   }
 });
 
-// Routes protÃ©gÃ©es
+// Routes protégées
 router.post(
   "/",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) => {
-    upload(req, res, (err: any) => {
+    upload(req, res, (err: unknown) => {
       if (err) {
-        if (err.code === "LIMIT_FILE_SIZE") {
+        const uploadError = err as MulterError & { message?: string };
+        if (uploadError.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: "Fichier trop volumineux",
-            details: "La taille maximale autorisÃ©e est de 3MB",
+            details: "La taille maximale autorisée est de 3MB",
           });
         }
-        if (err.message.includes("Type de fichier non autorisÃ©")) {
+        if (typeof uploadError.message === "string" && uploadError.message.includes("Type de fichier non autorisé")) {
           return res.status(400).json({
-            message: "Type de fichier non autorisÃ©",
-            details: err.message,
+            message: "Type de fichier non autorisé",
+            details: uploadError.message,
           });
         }
         return res.status(400).json({
           message: "Erreur d'upload",
-          details: err.message,
+          details: typeof uploadError.message === "string" ? uploadError.message : "Upload error",
         });
       }
       next();
@@ -140,14 +142,14 @@ router.post(
       if (!req.file) {
         return res.status(400).json({
           message: "Image requise",
-          details: "Aucun fichier n'a Ã©tÃ© uploadÃ©",
+          details: "Aucun fichier n'a été uploadé",
         });
       }
 
       const eventData = {
         ...req.body,
         imageSrc: req.file.path,
-        imagePublicId: (req.file as any).filename,
+        imagePublicId: (req.file as Express.Multer.File & { filename?: string }).filename || "",
       };
 
       const newEvent = new Event(eventData);
@@ -163,7 +165,7 @@ router.post(
   }
 );
 
-// Route pour mettre Ã  jour l'ordre des Ã©vÃ©nements (AVANT /:id pour Ã©viter les conflits)
+// Route pour mettre à jour l'ordre des événements (AVANT /:id pour éviter les conflits)
 router.put("/update-order", authMiddleware, async (req: Request, res: Response) => {
   try {
     await withRenumberLock(async () => {
@@ -200,29 +202,30 @@ router.put("/update-order", authMiddleware, async (req: Request, res: Response) 
   }
 });
 
-// Mise Ã  jour avec validation d'URL
+// Mise à jour avec validation d'URL
 router.put(
   "/:id",
   validateUrlId,
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) => {
-    upload(req, res, (err: any) => {
+    upload(req, res, (err: unknown) => {
       if (err) {
-        if (err.code === "LIMIT_FILE_SIZE") {
+        const uploadError = err as MulterError & { message?: string };
+        if (uploadError.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: "Fichier trop volumineux",
-            details: "La taille maximale autoris?e est de 3MB",
+            details: "La taille maximale autorisée est de 3MB",
           });
         }
-        if (err.message.includes("Type de fichier non autorise")) {
+        if (typeof uploadError.message === "string" && uploadError.message.includes("Type de fichier non autorise")) {
           return res.status(400).json({
             message: "Type de fichier non autorise",
-            details: err.message,
+            details: uploadError.message,
           });
         }
         return res.status(400).json({
           message: "Erreur d'upload",
-          details: err.message,
+          details: typeof uploadError.message === "string" ? uploadError.message : "Upload error",
         });
       }
       next();
@@ -243,7 +246,7 @@ router.put(
           await deleteImage(event.imagePublicId);
         }
         event.imageSrc = req.file.path;
-        event.imagePublicId = (req.file as any).filename;
+        event.imagePublicId = (req.file as Express.Multer.File & { filename?: string }).filename || "";
       }
 
       // Mettre a jour les autres champs (hors image deja traitee)
@@ -261,7 +264,7 @@ router.put(
   }
 );
 
-// Suppression avec validation d'URL et logs nettoyÃ©s
+// Suppression avec validation d'URL et logs nettoyés
 router.delete("/:id", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
   try {
     const event = await Event.findById(req.params.id);
@@ -275,7 +278,7 @@ router.delete("/:id", validateUrlId, authMiddleware, async (req: Request, res: R
 
     await Event.findByIdAndDelete(req.params.id);
 
-    // RenumÃ©roter tous les Ã©vÃ©nements visibles aprÃ¨s suppression
+    // Renuméroter tous les événements visibles après suppression
     await renumberVisibleEvents();
 
     res.json({ message: "Event deleted successfully" });
@@ -287,7 +290,7 @@ router.delete("/:id", validateUrlId, authMiddleware, async (req: Request, res: R
   }
 });
 
-// Masquer un Ã©vÃ©nement
+// Masquer un événement
 router.patch("/:id/hide", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
   try {
     const event = await Event.findByIdAndUpdate(req.params.id, { isHidden: true }, { new: true });
@@ -295,7 +298,7 @@ router.patch("/:id/hide", validateUrlId, authMiddleware, async (req: Request, re
       return res.status(404).json({ message: "Event not found" });
     }
 
-    // RenumÃ©roter tous les Ã©vÃ©nements visibles
+    // Renuméroter tous les événements visibles
     await renumberVisibleEvents();
 
     res.json(event);
@@ -305,7 +308,7 @@ router.patch("/:id/hide", validateUrlId, authMiddleware, async (req: Request, re
   }
 });
 
-// DÃ©masquer un Ã©vÃ©nement
+// Démasquer un événement
 router.patch("/:id/unhide", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
   try {
     const event = await Event.findByIdAndUpdate(req.params.id, { isHidden: false }, { new: true });
@@ -313,7 +316,7 @@ router.patch("/:id/unhide", validateUrlId, authMiddleware, async (req: Request, 
       return res.status(404).json({ message: "Event not found" });
     }
 
-    // RenumÃ©roter tous les Ã©vÃ©nements visibles
+    // Renuméroter tous les événements visibles
     await renumberVisibleEvents();
 
     res.json(event);
@@ -323,7 +326,7 @@ router.patch("/:id/unhide", validateUrlId, authMiddleware, async (req: Request, 
   }
 });
 
-// Masquer plusieurs Ã©vÃ©nements
+// Masquer plusieurs événements
 router.post("/hide-multiple", authMiddleware, async (req: Request, res: Response) => {
   try {
     const { eventIds } = req.body;
@@ -333,7 +336,7 @@ router.post("/hide-multiple", authMiddleware, async (req: Request, res: Response
 
     await Event.updateMany({ _id: { $in: eventIds } }, { isHidden: true });
 
-    // RenumÃ©roter tous les Ã©vÃ©nements visibles
+    // Renuméroter tous les événements visibles
     await renumberVisibleEvents();
 
     res.json({ message: `${eventIds.length} event(s) hidden successfully` });
@@ -343,7 +346,7 @@ router.post("/hide-multiple", authMiddleware, async (req: Request, res: Response
   }
 });
 
-// DÃ©masquer plusieurs Ã©vÃ©nements
+// Démasquer plusieurs événements
 router.post("/unhide-multiple", authMiddleware, async (req: Request, res: Response) => {
   try {
     const { eventIds } = req.body;
@@ -353,7 +356,7 @@ router.post("/unhide-multiple", authMiddleware, async (req: Request, res: Respon
 
     await Event.updateMany({ _id: { $in: eventIds } }, { isHidden: false });
 
-    // RenumÃ©roter tous les Ã©vÃ©nements visibles
+    // Renuméroter tous les événements visibles
     await renumberVisibleEvents();
 
     res.json({ message: `${eventIds.length} event(s) unhidden successfully` });
@@ -363,7 +366,7 @@ router.post("/unhide-multiple", authMiddleware, async (req: Request, res: Respon
   }
 });
 
-// Route utilitaire pour forcer la renumÃ©rotation (pour corriger manuellement si besoin)
+// Route utilitaire pour forcer la renumérotation (pour corriger manuellement si besoin)
 router.post("/renumber-all", authMiddleware, async (req: Request, res: Response) => {
   try {
     await renumberVisibleEvents();
@@ -374,7 +377,7 @@ router.post("/renumber-all", authMiddleware, async (req: Request, res: Response)
   }
 });
 
-// Marquer un Ã©vÃ©nement comme phare
+// Marquer un événement comme phare
 router.patch("/:id/feature", validateUrlId, authMiddleware, async (req: Request, res: Response) => {
   try {
     const event = await Event.findByIdAndUpdate(req.params.id, { isFeatured: true }, { new: true });
@@ -388,7 +391,7 @@ router.patch("/:id/feature", validateUrlId, authMiddleware, async (req: Request,
   }
 });
 
-// Retirer le statut phare d'un Ã©vÃ©nement
+// Retirer le statut phare d'un événement
 router.patch(
   "/:id/unfeature",
   validateUrlId,
@@ -411,7 +414,7 @@ router.patch(
   }
 );
 
-// Marquer plusieurs Ã©vÃ©nements comme phares
+// Marquer plusieurs événements comme phares
 router.post("/feature-multiple", authMiddleware, async (req: Request, res: Response) => {
   try {
     const { eventIds } = req.body;
@@ -428,7 +431,7 @@ router.post("/feature-multiple", authMiddleware, async (req: Request, res: Respo
   }
 });
 
-// Retirer le statut phare de plusieurs Ã©vÃ©nements
+// Retirer le statut phare de plusieurs événements
 router.post("/unfeature-multiple", authMiddleware, async (req: Request, res: Response) => {
   try {
     const { eventIds } = req.body;
@@ -446,3 +449,4 @@ router.post("/unfeature-multiple", authMiddleware, async (req: Request, res: Res
 });
 
 export default router;
+

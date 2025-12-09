@@ -140,25 +140,25 @@ eventSchema.pre("save", async function (next: (err?: CallbackError) => void) {
 });
 
 // Middleware pour logger les erreurs de validation (version sécurisée)
-eventSchema.post("save", function (error: any, doc: any, next: any) {
-  if (error.name === "ValidationError") {
+eventSchema.post("save", function (error: mongoose.Error, _doc: unknown, next: (err?: CallbackError) => void) {
+  if ((error as mongoose.Error & { name?: string }).name === "ValidationError") {
     logger.warn(
       {
-        errorCount: Object.keys(error.errors).length,
-        fields: Object.keys(error.errors),
+        errorCount: Object.keys((error as mongoose.Error & { errors?: Record<string, unknown> }).errors ?? {}).length,
+        fields: Object.keys((error as mongoose.Error & { errors?: Record<string, unknown> }).errors ?? {}),
       },
       "Event validation error occurred"
     );
   }
-  next(error);
+  next(error as CallbackError);
 });
 
 const Event = mongoose.model("Event", eventSchema);
 
 // Fonction helper pour valider un event avant de le sauvegarder
-export const validateEvent = async (eventData: any) => {
+export const validateEvent = async (eventData: unknown) => {
   try {
-    const event = new Event(eventData);
+    const event = new Event(eventData as Record<string, unknown>);
     await event.validate();
     return { isValid: true, errors: null };
   } catch (error) {

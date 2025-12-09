@@ -1,4 +1,6 @@
-import express, { NextFunction, Request, Response } from "express";
+import type { NextFunction, Request, Response } from "express";
+import express from "express";
+import type { MulterError } from "multer";
 import { deleteImage, uploadGallery } from "../config/cloudinary";
 import { authMiddleware } from "../middleware/auth";
 import { validateImageIds, validateImageOrder, validateUrlId } from "../middleware/validation";
@@ -23,29 +25,30 @@ router.post(
   "/",
   authMiddleware,
   (req: Request, res: Response, next: NextFunction) => {
-    uploadGallery(req, res, (err: any) => {
+    uploadGallery(req, res, (err: unknown) => {
       if (err) {
-        if (err.code === "LIMIT_FILE_SIZE") {
+        const uploadError = err as MulterError & { message?: string };
+        if (uploadError.code === "LIMIT_FILE_SIZE") {
           return res.status(400).json({
             message: "Fichier trop volumineux",
             details: "La taille maximale autorisée est de 5MB par image",
           });
         }
-        if (err.code === "LIMIT_FILE_COUNT") {
+        if (uploadError.code === "LIMIT_FILE_COUNT") {
           return res.status(400).json({
             message: "Trop de fichiers",
             details: "Maximum 10 images autorisées par upload",
           });
         }
-        if (err.message.includes("Type de fichier non autorisé")) {
+        if (uploadError.message && uploadError.message.includes("Type de fichier non autorisé")) {
           return res.status(400).json({
             message: "Type de fichier non autorisé",
-            details: err.message,
+            details: uploadError.message,
           });
         }
         return res.status(400).json({
           message: "Erreur d'upload",
-          details: err.message,
+          details: uploadError.message,
         });
       }
       next();
@@ -73,10 +76,10 @@ router.post(
 
       // Ajouter les nouvelles images au début (ordre 0, 1, 2...)
       for (let i = 0; i < uploadedFiles.length; i++) {
-        const file = uploadedFiles[i];
+        const file = uploadedFiles[i] as Express.Multer.File & { filename?: string };
         const newImage = new Gallery({
           imageSrc: file.path,
-          imagePublicId: (file as any).filename || `gallery_${Date.now()}_${i}`,
+          imagePublicId: file.filename || `gallery_${Date.now()}_${i}`,
           order: i,
         });
         await newImage.save();

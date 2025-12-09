@@ -197,7 +197,7 @@ app.use("/api/events", eventRoutes);
 app.use("/api/gallery", uploadLimiter, galleryRoutes);
 app.use("/api/shotgun-sync", shotgunSyncRoutes);
 
-app.use((err: any, req: express.Request, res: express.Response, next: express.NextFunction) => {
+app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
   logger.error(
     {
       err,
