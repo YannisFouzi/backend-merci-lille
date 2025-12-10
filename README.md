@@ -64,11 +64,18 @@ API Node.js/Express complète pour gérer :
 - **axios 1.6** - Client HTTP pour API Shotgun
 - **cors 2.8** - Gestion CORS
 
+### Logging
+
+- **pino 9.4** - Logging structuré JSON
+- **pino-pretty 11.2** - Pretty-printing en développement
+
 ### Développement
 
 - **ts-node 10.9** - Exécution TypeScript direct
 - **nodemon 3.0** - Hot reload en développement
 - **dotenv 16.4** - Gestion des variables d'environnement
+- **eslint 9.13** - Linting du code
+- **prettier 3.3** - Formatage du code
 
 ## 📦 Installation
 
@@ -131,8 +138,11 @@ NODE_ENV=development
 # ======================
 # JWT - AUTHENTIFICATION
 # ======================
-# Secret pour les tokens JWT (32+ caractères recommandés)
+# Secret pour les access tokens JWT (32+ caractères recommandés)
 JWT_SECRET=votre_secret_jwt_tres_long_et_securise_minimum_32_caracteres
+
+# Secret pour les refresh tokens JWT (différent du JWT_SECRET)
+REFRESH_JWT_SECRET=votre_secret_refresh_token_different_et_securise
 
 # ======================
 # CLOUDINARY - STOCKAGE IMAGES
@@ -146,6 +156,18 @@ CLOUDINARY_API_SECRET=votre_api_secret
 # ======================
 SHOTGUN_ORGANIZER_ID=183206
 SHOTGUN_API_TOKEN=votre_token_shotgun_jwt
+
+# ======================
+# CORS - ORIGINES AUTORISÉES
+# ======================
+# Liste des origines autorisées séparées par des virgules
+CORS_ORIGINS=https://votre-frontend.com,http://localhost:5173
+
+# ======================
+# LOGGING
+# ======================
+# Niveau de log: trace, debug, info, warn, error, fatal
+LOG_LEVEL=info
 ```
 
 ### Créer un administrateur
@@ -190,6 +212,7 @@ backend-merci-lille/
 │   │
 │   ├── middleware/            # Middlewares Express
 │   │   ├── auth.ts           # Authentification JWT
+│   │   ├── csrf.ts           # Protection CSRF (double-submit)
 │   │   ├── rateLimiter.ts    # Rate limiting
 │   │   └── validation.ts     # Validation des données
 │   │
@@ -208,6 +231,9 @@ backend-merci-lille/
 │   ├── services/           # Services métier
 │   │   ├── shotgun.service.ts      # Client API Shotgun
 │   │   └── shotgun-sync.service.ts # Logique de synchronisation
+│   │
+│   ├── utils/             # Utilitaires
+│   │   └── logger.ts      # Configuration Pino logger
 │   │
 │   ├── env-loader.js       # Chargeur de variables d'environnement
 │   └── index.ts           # Point d'entrée principal
@@ -293,10 +319,27 @@ Déconnexion
 
 ---
 
+#### `GET /api/auth/csrf`
+Obtenir un token CSRF pour les requêtes
+
+**Réponse:**
+```json
+{
+  "message": "CSRF token generated"
+}
+```
+
+**Cookie défini:**
+- `csrf-token` (non-HttpOnly, 12 heures, readable par le client)
+
+**Note:** Le client doit inclure ce token dans le header `X-CSRF-Token` pour toutes les requêtes non-GET.
+
+---
+
 #### `GET /api/auth/verify`
 Vérifier la validité du token
 
-**Headers:** 
+**Headers:**
 - Cookie avec `accessToken`
 - `X-Requested-With: XMLHttpRequest`
 
@@ -672,10 +715,15 @@ Vérifier l'état du serveur
 - ✅ **express-validator** - Validation stricte des entrées
 - ✅ **Multer file filter** - Vérification du type MIME des uploads
 
-#### Protection CSRF
+#### Protection CSRF (Double-Submit Pattern)
 
-- Header `X-Requested-With` obligatoire pour toutes les requêtes non-GET
-- Vérification côté serveur dans le middleware CSRF
+- ✅ **Token CSRF** généré côté serveur (32 bytes aléatoires)
+- ✅ **Cookie non-HttpOnly** - Le client peut lire le token
+- ✅ **Header X-CSRF-Token** - Le client doit envoyer le token dans ce header
+- ✅ **Validation** - Le serveur vérifie que cookie === header
+- ✅ **Expiration** - 12 heures, rechargé à chaque login/refresh
+- ✅ **Protection** - Appliquée sur toutes les routes POST, PUT, PATCH, DELETE
+- Header `X-Requested-With: XMLHttpRequest` obligatoire pour toutes les requêtes protégées
 
 #### Autres protections
 
@@ -695,6 +743,38 @@ Vérifier l'état du serveur
 ### Rapport de sécurité complet
 
 Consultez `/SECURITY_AUDIT_REPORT.md` et `/SECURITY_IMPLEMENTATION_PLAN.md` à la racine du projet.
+
+## 🔢 Système de numérotation des événements
+
+L'API implémente un système de numérotation automatique sophistiqué pour les événements.
+
+### Logique de numérotation
+
+- **Événements visibles** : Numérotés séquentiellement `001`, `002`, `003`, etc.
+- **Événements masqués** : Préfixés avec `HIDDEN_{mongoId}`
+- **Numéros temporaires** : `TEMP_{index}_{timestamp}` pendant les mises à jour
+
+### Algorithme à 3 étapes (renumbering)
+
+Pour éviter les conflits de contraintes uniques lors de la renumérotation :
+
+1. **Étape 1** : Marquer tous les événements masqués avec le préfixe `HIDDEN_`
+2. **Étape 2** : Appliquer des numéros temporaires à tous les événements visibles
+3. **Étape 3** : Appliquer les numéros définitifs séquentiels
+
+**Avantages :**
+- ✅ Évite les duplications de numéros
+- ✅ Supporte le masquage/affichage sans casser la séquence
+- ✅ Thread-safe grâce au verrouillage Promise
+- ✅ Maintient la cohérence de l'ordre
+
+### Déclencheurs de renumérotation
+
+- Création d'un nouvel événement visible
+- Suppression d'un événement visible
+- Masquage/affichage d'un événement
+- Réorganisation manuelle via `/api/events/update-order`
+- Commande manuelle via `/api/events/renumber-all`
 
 ## 🎫 Intégration Shotgun
 
@@ -884,11 +964,36 @@ Configurez le monitoring avec l'endpoint `/health`
 - ✅ Rate limiting pour éviter l'abus
 - ✅ TTL sur les refresh tokens pour nettoyer la base
 
-## 🐛 Debugging
+## 📊 Logging (Pino)
 
-### Logs
+Le backend utilise **Pino**, un logger JSON ultra-rapide pour Node.js.
 
-Les logs sont sécurisés (pas de données sensibles) mais informatifs :
+### Configuration
+
+Le logger est configuré dans `src/utils/logger.ts` avec :
+
+- **En développement** :
+  - Pretty-printing avec couleurs (pino-pretty)
+  - Format lisible pour les humains
+  - Timestamp formaté
+
+- **En production** :
+  - Logs structurés en JSON
+  - Optimisés pour les outils de monitoring (Datadog, Loggly, etc.)
+  - Haute performance
+
+### Niveaux de log
+
+Configurés via la variable `LOG_LEVEL` :
+
+- `trace` - Détails très verbeux
+- `debug` - Informations de débogage
+- `info` - Informations générales (défaut)
+- `warn` - Avertissements
+- `error` - Erreurs
+- `fatal` - Erreurs fatales
+
+### Exemples de logs
 
 ```bash
 # Connexion MongoDB
@@ -897,7 +1002,23 @@ Les logs sont sécurisés (pas de données sensibles) mais informatifs :
 # Shotgun sync
 🔍 Fetching events for organizer ID: 183206
 ✅ Successfully fetched 10 total events from Shotgun
+
+# Authentification
+🔐 Login attempt from IP: 192.168.1.1
+✅ Login successful for user: admin
+
+# Erreurs
+❌ Authentication failed: Invalid credentials
 ```
+
+### Sécurité des logs
+
+- ✅ Pas de mots de passe loggés
+- ✅ Pas de tokens JWT complets
+- ✅ Pas de données sensibles (emails complets, etc.)
+- ✅ IP anonymisées en production (optionnel)
+
+## 🐛 Debugging
 
 ### Problèmes courants
 
@@ -974,5 +1095,5 @@ Pour contribuer au projet :
 
 ---
 
-**© 2024 Merci Lille. Tous droits réservés.**
+**© 2024-présent Merci Lille. Tous droits réservés.**
 
