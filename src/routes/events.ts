@@ -125,13 +125,14 @@ async function renumberVisibleEvents(orderedIds?: string[]) {
       }
       logger.info("Renumerotation : numeros temporaires appliques");
 
-      // ETAPE 2 : Mettre les vrais numeros (001, 002, 003...)
+      // ETAPE 2 : Mettre les vrais numeros en ordre inverse
+      // Le premier evenement visuel (en haut) prend le plus grand numero.
       for (const [index, event] of visibleEvents.entries()) {
         if (!event) {
           throw createRouteError("Visible event missing during renumbering", 500);
         }
 
-        const newNumber = String(index + 1).padStart(3, "0");
+        const newNumber = String(visibleEvents.length - index).padStart(3, "0");
         await Event.findByIdAndUpdate(event._id, {
           eventNumber: newNumber,
         });
