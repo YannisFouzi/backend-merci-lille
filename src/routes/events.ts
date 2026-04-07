@@ -25,12 +25,74 @@ async function withRenumberLock<T>(fn: () => Promise<T>): Promise<T> {
   }
 }
 
+function createRouteError(message: string, statusCode: number) {
+  return Object.assign(new Error(message), { statusCode });
+}
+
+function hasManualOrder(event: { order?: number | null }) {
+  return typeof event.order === "number" && event.order !== 0;
+}
+
+function getTimestamp(value: unknown) {
+  const timestamp = new Date(value as string | number | Date).getTime();
+  return Number.isNaN(timestamp) ? 0 : timestamp;
+}
+
+function sortVisibleEventsForDisplay<T extends { order?: number | null; date?: unknown; createdAt?: unknown }>(
+  events: T[]
+) {
+  return [...events].sort((a, b) => {
+    if (hasManualOrder(a) && hasManualOrder(b)) {
+      return (a.order as number) - (b.order as number);
+    }
+
+    const dateDiff = getTimestamp(b.date) - getTimestamp(a.date);
+    if (dateDiff !== 0) {
+      return dateDiff;
+    }
+
+    return getTimestamp(b.createdAt) - getTimestamp(a.createdAt);
+  });
+}
+
+async function getVisibleEventsForRenumber(orderedIds?: string[]) {
+  const visibleFilter = { isHidden: { $ne: true } };
+
+  if (!orderedIds) {
+    const visibleEvents = await Event.find(visibleFilter);
+    return sortVisibleEventsForDisplay(visibleEvents);
+  }
+
+  const normalizedIds = orderedIds.map((id) => String(id));
+  if (new Set(normalizedIds).size !== normalizedIds.length) {
+    throw createRouteError("Duplicate event IDs provided", 400);
+  }
+
+  const currentVisibleCount = await Event.countDocuments(visibleFilter);
+  if (currentVisibleCount !== normalizedIds.length) {
+    throw createRouteError("Provided event order is out of date", 409);
+  }
+
+  const visibleEvents = await Event.find({
+    _id: { $in: normalizedIds },
+    isHidden: { $ne: true },
+  });
+  const eventsById = new Map(visibleEvents.map((event) => [String(event._id), event]));
+  const orderedVisibleEvents = normalizedIds.map((id) => eventsById.get(id));
+
+  if (orderedVisibleEvents.some((event) => !event)) {
+    throw createRouteError("Provided event order does not match current visible events", 409);
+  }
+
+  return orderedVisibleEvents;
+}
+
 /**
  * Fonction utilitaire pour renuméroter tous les événements NON masqués
  * Les événements masqués auront un eventNumber null
  * Utilise une stratégie en 3 temps pour éviter les conflits de clés uniques
  */
-async function renumberVisibleEvents() {
+async function renumberVisibleEvents(orderedIds?: string[]) {
   return withRenumberLock(async () => {
     try {
       logger.info("Renumerotation : debut...");
@@ -45,26 +107,32 @@ async function renumberVisibleEvents() {
       }
       logger.info(`Renumerotation : ${hiddenEvents.length} evenement(s) masques marques`);
 
-      // Recuperer tous les evenements NON masques, tries par order puis par date de creation
-      const visibleEvents = await Event.find({ isHidden: { $ne: true } }).sort({
-        order: 1,
-        createdAt: -1,
-      });
+      // Recuperer les evenements NON masques dans l'ordre souhaite
+      const visibleEvents = await getVisibleEventsForRenumber(orderedIds);
 
       logger.info(`Renumerotation : ${visibleEvents.length} evenements visibles a traiter`);
 
       // ETAPE 1 : Mettre des numeros temporaires pour eviter les conflits
-      for (let i = 0; i < visibleEvents.length; i++) {
-        await Event.findByIdAndUpdate(visibleEvents[i]._id, {
-          eventNumber: `TEMP_${i}_${Date.now()}`,
+      const tempSuffix = Date.now();
+      for (const [index, event] of visibleEvents.entries()) {
+        if (!event) {
+          throw createRouteError("Visible event missing during renumbering", 500);
+        }
+
+        await Event.findByIdAndUpdate(event._id, {
+          eventNumber: `TEMP_${index}_${tempSuffix}`,
         });
       }
       logger.info("Renumerotation : numeros temporaires appliques");
 
       // ETAPE 2 : Mettre les vrais numeros (001, 002, 003...)
-      for (let i = 0; i < visibleEvents.length; i++) {
-        const newNumber = String(i + 1).padStart(3, "0");
-        await Event.findByIdAndUpdate(visibleEvents[i]._id, {
+      for (const [index, event] of visibleEvents.entries()) {
+        if (!event) {
+          throw createRouteError("Visible event missing during renumbering", 500);
+        }
+
+        const newNumber = String(index + 1).padStart(3, "0");
+        await Event.findByIdAndUpdate(event._id, {
           eventNumber: newNumber,
         });
       }
@@ -369,10 +437,32 @@ router.post("/unhide-multiple", authMiddleware, async (req: Request, res: Respon
 // Route utilitaire pour forcer la renumérotation (pour corriger manuellement si besoin)
 router.post("/renumber-all", authMiddleware, async (req: Request, res: Response) => {
   try {
-    await renumberVisibleEvents();
+    const { orderedIds } = req.body ?? {};
+
+    if (
+      orderedIds !== undefined &&
+      (!Array.isArray(orderedIds) ||
+        !orderedIds.every((id) => typeof id === "string" && id.trim().length > 0))
+    ) {
+      return res.status(400).json({ message: "Invalid ordered IDs provided" });
+    }
+
+    await renumberVisibleEvents(orderedIds);
     res.json({ message: "All visible events renumbered successfully" });
   } catch (error) {
-    logger.error("Error renumbering events");
+    logger.error({ err: error }, "Error renumbering events");
+
+    if (
+      typeof error === "object" &&
+      error !== null &&
+      "statusCode" in error &&
+      typeof error.statusCode === "number" &&
+      "message" in error &&
+      typeof error.message === "string"
+    ) {
+      return res.status(error.statusCode).json({ message: error.message });
+    }
+
     res.status(500).json({ message: "Error renumbering events" });
   }
 });
