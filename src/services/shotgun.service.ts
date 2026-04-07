@@ -51,23 +51,33 @@ class ShotgunService {
     return this._apiKey;
   }
 
-  /**
-   * Récupère tous les événements de l'organisateur (pagination gérée).
-   */
-  async fetchOrganizerEvents(): Promise<ShotgunEvent[]> {
-    const organizerId = this.organizerId;
-    const apiKey = this.apiKey;
+  private async fetchFutureOrganizerEvents(
+    organizerId: string,
+    apiKey: string
+  ): Promise<ShotgunEvent[]> {
+    const response = await axios.get<{ data: ShotgunEvent[] }>(
+      `${this.baseUrl}/organizers/${organizerId}/events`,
+      {
+        params: {
+          key: apiKey,
+        },
+        timeout: 10000,
+      }
+    );
 
-    if (!organizerId || !apiKey) {
-      throw new Error("Shotgun credentials are not configured");
-    }
+    const events = response.data?.data ?? [];
+    logger.debug({ count: events.length }, "Fetched Shotgun future events");
+    return events;
+  }
 
-    const allEvents: ShotgunEvent[] = [];
+  private async fetchPastOrganizerEvents(
+    organizerId: string,
+    apiKey: string
+  ): Promise<ShotgunEvent[]> {
+    const allPastEvents: ShotgunEvent[] = [];
     let page = 0;
     const limit = 100;
     let hasMore = true;
-
-    logger.debug({ organizerId }, "Fetching Shotgun events");
 
     while (hasMore) {
       const response = await axios.get<{ data: ShotgunEvent[] }>(
@@ -75,7 +85,7 @@ class ShotgunService {
         {
           params: {
             key: apiKey,
-            past_events: false,
+            past_events: true,
             page,
             limit,
           },
@@ -84,24 +94,68 @@ class ShotgunService {
       );
 
       const events = response.data?.data ?? [];
-      allEvents.push(...events);
+      allPastEvents.push(...events);
 
-      logger.debug({ page: page + 1, count: events.length }, "Fetched Shotgun page");
+      logger.debug({ page: page + 1, count: events.length }, "Fetched Shotgun past events page");
 
       hasMore = events.length === limit;
       page += 1;
     }
 
-    logger.info({ total: allEvents.length }, "Fetched Shotgun events");
+    return allPastEvents;
+  }
+
+  /**
+   * Recupere les evenements futurs, ou futurs + passes si demande.
+   */
+  async fetchOrganizerEvents(
+    options: {
+      includePastEvents?: boolean;
+    } = {}
+  ): Promise<ShotgunEvent[]> {
+    const organizerId = this.organizerId;
+    const apiKey = this.apiKey;
+    const includePastEvents = options.includePastEvents ?? true;
+
+    if (!organizerId || !apiKey) {
+      throw new Error("Shotgun credentials are not configured");
+    }
+
+    logger.debug({ organizerId, includePastEvents }, "Fetching Shotgun events");
+
+    const futureEvents = await this.fetchFutureOrganizerEvents(organizerId, apiKey);
+
+    if (!includePastEvents) {
+      logger.info(
+        { total: futureEvents.length, future: futureEvents.length, past: 0 },
+        "Fetched Shotgun events"
+      );
+      return futureEvents;
+    }
+
+    const pastEvents = await this.fetchPastOrganizerEvents(organizerId, apiKey);
+    const eventsById = new Map<number, ShotgunEvent>();
+
+    for (const event of [...futureEvents, ...pastEvents]) {
+      eventsById.set(event.id, event);
+    }
+
+    const allEvents = Array.from(eventsById.values());
+
+    logger.info(
+      { total: allEvents.length, future: futureEvents.length, past: pastEvents.length },
+      "Fetched Shotgun events"
+    );
+
     return allEvents;
   }
 
   /**
-   * Récupère un événement spécifique par son ID Shotgun.
+   * Recupere un evenement specifique par son ID Shotgun.
    */
   async fetchEventById(eventId: number): Promise<ShotgunEvent> {
-    const events = await this.fetchOrganizerEvents();
-    const event = events.find((e) => e.id === eventId);
+    const events = await this.fetchOrganizerEvents({ includePastEvents: true });
+    const event = events.find((candidate) => candidate.id === eventId);
 
     if (!event) {
       throw new Error(`Event ${eventId} not found`);
@@ -111,11 +165,11 @@ class ShotgunService {
   }
 
   /**
-   * Vérifie l'accessibilité de l'API et la validité du token.
+   * Verifie l'accessibilite de l'API et la validite du token.
    */
   async testConnection(): Promise<boolean> {
     try {
-      await this.fetchOrganizerEvents();
+      await this.fetchOrganizerEvents({ includePastEvents: true });
       return true;
     } catch (error) {
       logger.error({ err: error }, "Shotgun connection test failed");

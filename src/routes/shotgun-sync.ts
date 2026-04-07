@@ -49,14 +49,18 @@ router.post("/sync-all", authMiddleware, async (_req: Request, res: Response) =>
       success: true,
       message: `Synchronization completed: ${result.created} created, ${result.updated} updated`,
       data: {
+        total: result.total,
         created: result.created,
         updated: result.updated,
         errors: result.errors,
         events: result.syncedEvents,
+        createdEvents: result.createdEvents,
+        updatedEvents: result.updatedEvents,
       },
     });
   } catch (error) {
     logger.error({ err: error }, "Shotgun sync failed");
+
     return res.status(500).json({
       success: false,
       message: "Failed to sync events from Shotgun",
@@ -103,18 +107,26 @@ router.post("/sync-event/:shotgunId", authMiddleware, async (req: Request, res: 
  */
 router.get("/preview", authMiddleware, async (_req: Request, res: Response) => {
   try {
-    const events = await shotgunService.fetchOrganizerEvents();
+    const preview = await shotgunSyncService.previewSyncAllEvents();
 
     return res.json({
       success: true,
-      message: `Found ${events.length} events on Shotgun`,
-      data: events,
+      message: `Preview ready: ${preview.created} to create, ${preview.updated} to update`,
+      data: {
+        total: preview.total,
+        created: preview.created,
+        updated: preview.updated,
+        previewEvents: preview.previewEvents,
+        createdEvents: preview.createdEvents,
+        updatedEvents: preview.updatedEvents,
+        errors: [],
+      },
     });
   } catch (error) {
-    logger.error({ err: error }, "Failed to fetch Shotgun events");
+    logger.error({ err: error }, "Failed to preview Shotgun sync");
     return res.status(500).json({
       success: false,
-      message: "Failed to fetch events from Shotgun",
+      message: "Failed to preview Shotgun sync",
       error: error instanceof Error ? error.message : "Unknown error",
     });
   }

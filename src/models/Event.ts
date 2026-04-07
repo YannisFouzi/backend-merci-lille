@@ -70,6 +70,11 @@ const eventSchema = new mongoose.Schema({
     unique: true,
     sparse: true, // Permet d'avoir plusieurs documents avec shotgunId null
   },
+  shotgunCoverUrl: {
+    type: String,
+    required: false,
+    trim: true,
+  },
   isHidden: {
     type: Boolean,
     default: false,
