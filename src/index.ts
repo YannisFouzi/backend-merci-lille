@@ -12,6 +12,7 @@ import { initRateLimiter } from "./middleware/rateLimiter";
 import authRoutes from "./routes/auth";
 import eventRoutes from "./routes/events";
 import galleryRoutes from "./routes/gallery";
+import integrationRoutes from "./routes/integrations";
 import shotgunSyncRoutes from "./routes/shotgun-sync";
 import { logger } from "./utils/logger";
 
@@ -195,6 +196,7 @@ app.get("/health", (req, res) => {
 app.use("/api/auth", authRoutes);
 app.use("/api/events", eventRoutes);
 app.use("/api/gallery", uploadLimiter, galleryRoutes);
+app.use("/api/integrations", integrationRoutes);
 app.use("/api/shotgun-sync", shotgunSyncRoutes);
 
 app.use((err: unknown, req: express.Request, res: express.Response, next: express.NextFunction) => {
@@ -223,5 +225,4 @@ connectDB().then(() => {
     logger.info({ port: PORT }, "Server running");
   });
 });
-
 

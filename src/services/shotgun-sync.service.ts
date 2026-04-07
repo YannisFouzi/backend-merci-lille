@@ -111,6 +111,13 @@ interface SyncPreviewResult {
   }>;
 }
 
+type SyncEventByIdStatus = "created" | "updated" | "unchanged";
+
+interface SyncEventByIdDetailedResult {
+  status: SyncEventByIdStatus;
+  event: Document & EventPayload;
+}
+
 type SyncPlan = {
   shotgunEvents: ShotgunEvent[];
   eventsByShotgunId: Map<number, EventDocument>;
@@ -664,6 +671,10 @@ class ShotgunSyncService {
     }
   }
 
+  private isDuplicateKeyError(error: unknown): error is { code: number } {
+    return typeof error === "object" && error !== null && "code" in error && error.code === 11000;
+  }
+
   /**
    * Synchronise tous les evenements depuis Shotgun
    */
@@ -761,7 +772,7 @@ class ShotgunSyncService {
   /**
    * Synchronise un evenement specifique par son ID Shotgun
    */
-  async syncEventById(shotgunEventId: number): Promise<Document & EventPayload> {
+  async syncEventByIdDetailed(shotgunEventId: number): Promise<SyncEventByIdDetailedResult> {
     try {
       const shotgunEvent = await shotgunService.fetchEventById(shotgunEventId);
       const existingEvent = (await Event.findOne({
@@ -770,7 +781,10 @@ class ShotgunSyncService {
       const comparison = this.buildComparisonPayload(shotgunEvent);
 
       if (existingEvent && !this.hasEventChanged(existingEvent, comparison)) {
-        return existingEvent as Document & EventPayload;
+        return {
+          status: "unchanged",
+          event: existingEvent as Document & EventPayload,
+        };
       }
 
       const prepared = await this.prepareEventPayload(shotgunEvent, existingEvent);
@@ -787,19 +801,48 @@ class ShotgunSyncService {
           existingEvent.imagePublicId,
           prepared.imageChanged
         );
-        return existingEvent as Document & EventPayload;
+        return {
+          status: "updated",
+          event: existingEvent as Document & EventPayload,
+        };
       }
 
-      const newEvent = new Event(prepared.payload) as EventDocument;
-      await newEvent.save();
-      return newEvent as Document & EventPayload;
+      try {
+        const newEvent = new Event(prepared.payload) as EventDocument;
+        await newEvent.save();
+        return {
+          status: "created",
+          event: newEvent as Document & EventPayload,
+        };
+      } catch (error) {
+        if (this.isDuplicateKeyError(error)) {
+          const concurrentEvent = (await Event.findOne({
+            shotgunId: shotgunEvent.id,
+          })) as EventDocument | null;
+
+          if (concurrentEvent) {
+            logger.warn({ shotgunEventId }, "Concurrent Shotgun sync detected, returning existing event");
+            return {
+              status: "unchanged",
+              event: concurrentEvent as Document & EventPayload,
+            };
+          }
+        }
+
+        throw error;
+      }
     } catch (error) {
       throw new Error(
         `Failed to sync event ${shotgunEventId}: ${error instanceof Error ? error.message : "Unknown error"}`
       );
     }
   }
+
+  async syncEventById(shotgunEventId: number): Promise<Document & EventPayload> {
+    const result = await this.syncEventByIdDetailed(shotgunEventId);
+    return result.event;
+  }
 }
 
 export const shotgunSyncService = new ShotgunSyncService();
-export type { SyncResult, SyncPreviewResult, EventPayload };
+export type { SyncResult, SyncPreviewResult, EventPayload, SyncEventByIdDetailedResult, SyncEventByIdStatus };

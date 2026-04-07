@@ -181,3 +181,46 @@ export const validateImageOrder = [
   handleValidationErrors,
 ];
 
+export const validateShotnotifEventDetectedIntegration = [
+  body("organizerId")
+    .trim()
+    .isLength({ min: 1, max: 50 })
+    .withMessage("organizerId est requis")
+    .matches(/^[0-9]+$/)
+    .withMessage("organizerId doit etre numerique"),
+
+  body("shotgunEventId")
+    .isInt({ gt: 0 })
+    .withMessage("shotgunEventId doit etre un entier positif")
+    .toInt(),
+
+  body("requestId")
+    .trim()
+    .isLength({ min: 1, max: 120 })
+    .withMessage("requestId est requis et doit faire moins de 120 caracteres")
+    .matches(/^[A-Za-z0-9._:-]+$/)
+    .withMessage("requestId contient des caracteres non autorises"),
+
+  body("detectedAt")
+    .isISO8601({ strict: true, strictSeparator: true })
+    .withMessage("detectedAt doit etre une date ISO8601 valide"),
+
+  body("trigger")
+    .equals("new_event_detected")
+    .withMessage("trigger doit etre egal a new_event_detected"),
+
+  body("source")
+    .optional()
+    .trim()
+    .isLength({ max: 100 })
+    .withMessage("source doit faire moins de 100 caracteres"),
+
+  body("eventName")
+    .optional()
+    .trim()
+    .isLength({ max: 200 })
+    .withMessage("eventName doit faire moins de 200 caracteres"),
+
+  handleValidationErrors,
+];
+

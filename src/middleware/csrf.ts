@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextFunction, Request, Response } from "express";
 
 const CSRF_COOKIE_NAME = "csrfToken";
+const CSRF_EXEMPT_PATH_PREFIXES = ["/api/integrations/"];
 
 const isSafeMethod = (method: string) => ["GET", "HEAD", "OPTIONS"].includes(method.toUpperCase());
 const isProduction = () => process.env.NODE_ENV === "production";
@@ -26,6 +27,10 @@ export const clearCsrfToken = (res: Response) => {
 
 export const csrfProtection = (req: Request, res: Response, next: NextFunction) => {
   if (isSafeMethod(req.method)) {
+    return next();
+  }
+
+  if (CSRF_EXEMPT_PATH_PREFIXES.some((prefix) => req.path.startsWith(prefix))) {
     return next();
   }
 
