@@ -11,6 +11,7 @@ API REST sécurisée pour la gestion d'événements musicaux avec authentificati
 ## 📋 Table des matières
 
 - [Aperçu](#-aperçu)
+- [Mises à Jour 2026](#-mises-à-jour-2026)
 - [Technologies](#-technologies)
 - [Installation](#-installation)
 - [Configuration](#-configuration)
@@ -29,8 +30,18 @@ API Node.js/Express complète pour gérer :
 - **Gestion d'événements** (CRUD complet)
 - **Gestion de galerie photo** avec upload vers Cloudinary
 - **Synchronisation Shotgun** pour import automatique des événements
+- **Intégration serveur-à-serveur `shotnotif`** pour synchroniser automatiquement un événement détecté
 - **Rate limiting** et protections contre les attaques
 - **Validation des données** et sanitisation
+
+## 🆕 Mises à Jour 2026
+
+- Compatibilité Node récente renforcée : la chaîne JWT a été mise à jour pour éviter les crashs rencontrés avec des versions modernes de Node.
+- La prévisualisation Shotgun retourne maintenant un vrai résumé métier : total analysé, événements à créer, événements à mettre à jour, `previewEvents`, titres créés et détails `avant / après`.
+- L'import Shotgun prend désormais en compte les événements passés et futurs de l'organizer pour éviter les faux négatifs dans les previews et synchronisations.
+- Une API machine-to-machine dédiée a été ajoutée pour `shotnotif` : `POST /api/integrations/shotnotif/events/detected`.
+- Cette intégration est protégée par signature HMAC + timestamp, séparée des routes admin web, et exemptée de CSRF pour les appels serveur-à-serveur.
+- Le backend gère l'idempotence côté synchronisation d'événement Shotgun avec des statuts internes `created`, `updated` et `unchanged`.
 
 ## 🚀 Technologies
 
@@ -158,6 +169,11 @@ SHOTGUN_ORGANIZER_ID=183206
 SHOTGUN_API_TOKEN=votre_token_shotgun_jwt
 
 # ======================
+# SHOTNOTIF - INTEGRATION SERVEUR A SERVEUR
+# ======================
+SHOTNOTIF_INTEGRATION_SECRET=change-me-shotnotif
+
+# ======================
 # CORS - ORIGINES AUTORISÉES
 # ======================
 # Liste des origines autorisées séparées par des virgules
@@ -213,6 +229,7 @@ backend-merci-lille/
 │   ├── middleware/            # Middlewares Express
 │   │   ├── auth.ts           # Authentification JWT
 │   │   ├── csrf.ts           # Protection CSRF (double-submit)
+│   │   ├── integrationAuth.ts # Auth machine-to-machine HMAC pour shotnotif
 │   │   ├── rateLimiter.ts    # Rate limiting
 │   │   └── validation.ts     # Validation des données
 │   │
@@ -226,6 +243,7 @@ backend-merci-lille/
 │   │   ├── auth.ts         # Authentification
 │   │   ├── events.ts       # Événements (CRUD)
 │   │   ├── gallery.ts      # Galerie (upload)
+│   │   ├── integrations.ts # Intégrations serveur-à-serveur
 │   │   └── shotgun-sync.ts # Synchronisation Shotgun
 │   │
 │   ├── services/           # Services métier
@@ -594,17 +612,35 @@ Prévisualiser les événements Shotgun sans les importer
 ```json
 {
   "success": true,
-  "message": "Found 10 events on Shotgun",
-  "data": [
-    {
-      "id": 123456,
-      "name": "Soirée Électro",
-      "startTime": "2024-12-31T20:00:00Z",
-      "url": "https://shotgun.live/...",
-      "coverUrl": "https://...",
-      // ... autres champs
-    }
-  ]
+  "message": "Preview ready: 4 to create, 2 to update",
+  "data": {
+    "total": 32,
+    "created": 4,
+    "updated": 2,
+    "previewEvents": [/* grille finale preview */],
+    "createdEvents": [
+      {
+        "shotgunId": 123456,
+        "title": "Soirée Électro",
+        "startTime": "2026-12-31T20:00:00Z",
+        "isPast": false
+      }
+    ],
+    "updatedEvents": [
+      {
+        "shotgunId": 987654,
+        "title": "Event existant",
+        "changes": [
+          {
+            "field": "Titre",
+            "before": "Ancien titre",
+            "after": "Nouveau titre"
+          }
+        ]
+      }
+    ],
+    "errors": []
+  }
 }
 ```
 
@@ -651,6 +687,67 @@ Synchroniser un événement spécifique
   "data": {/* événement créé/mis à jour */}
 }
 ```
+
+---
+
+### 🤖 Intégrations Serveur-à-Serveur (`/api/integrations`)
+
+Ces routes sont destinées aux appels machine-to-machine. Elles n'utilisent ni cookie admin, ni JWT d'interface web, ni CSRF. Elles sont protégées par signature HMAC + timestamp.
+
+#### `POST /api/integrations/shotnotif/events/detected`
+Endpoint appelé par `shotnotif` lorsqu'un nouvel événement doit être importé dans Merci Lille.
+
+**Headers requis :**
+```text
+Content-Type: application/json
+X-Integration-Timestamp: <unix timestamp en secondes>
+X-Integration-Signature: sha256=<digest_hex>
+```
+
+**Body :**
+```json
+{
+  "organizerId": "183206",
+  "shotgunEventId": 410006,
+  "requestId": "shotnotif-410006-2026-04-07T12:00:00.000Z",
+  "detectedAt": "2026-04-07T12:00:00.000Z",
+  "trigger": "new_event_detected",
+  "source": "shotnotif",
+  "eventName": "Nom optionnel"
+}
+```
+
+**Contrat de signature HMAC :**
+```text
+<timestamp>
+<HTTP_METHOD>
+<PATH>
+<organizerId>
+<shotgunEventId>
+<requestId>
+<detectedAt>
+<trigger>
+```
+
+**Réponse :**
+```json
+{
+  "success": true,
+  "message": "Event synchronized successfully",
+  "data": {
+    "requestId": "shotnotif-410006-2026-04-07T12:00:00.000Z",
+    "organizerId": "183206",
+    "shotgunEventId": 410006,
+    "status": "created",
+    "event": {/* événement Mongo */}
+  }
+}
+```
+
+**Notes :**
+- Le `GET` sur cette URL retourne normalement `404`.
+- Un `POST` sans headers HMAC retourne `401`.
+- L'intégration est aujourd'hui scoped à l'organizer `183206`.
 
 ---
 
@@ -785,6 +882,7 @@ L'API permet la synchronisation automatique avec Shotgun, une plateforme de bill
 ```env
 SHOTGUN_ORGANIZER_ID=183206
 SHOTGUN_API_TOKEN=votre_token_jwt_shotgun
+SHOTNOTIF_INTEGRATION_SECRET=change-me-shotnotif
 ```
 
 ### Obtenir un token Shotgun
@@ -808,6 +906,12 @@ Le service `shotgun-sync.service.ts` :
 - Upload vers Cloudinary
 - Crée ou met à jour les événements
 - Gère les doublons via `shotgunId`
+
+L'intégration `shotnotif` :
+- utilise `POST /api/integrations/shotnotif/events/detected`
+- vérifie une signature HMAC avec `SHOTNOTIF_INTEGRATION_SECRET`
+- délègue ensuite la création / mise à jour au service Shotgun existant
+- est pensée pour une communication serveur-à-serveur indépendante de l'auth admin web
 
 ### Guide complet
 
